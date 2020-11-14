@@ -140,6 +140,7 @@ class DDPGPolicy(BasePolicy):
         """
         model = getattr(self, model)
         obs = batch[input]
+        #TODO why need state
         actions, h = model(obs, state=state, info=batch.info)
         actions += self._action_bias
         if self._noise and not self.updating:
