@@ -125,8 +125,8 @@ def _create_value(
 
 def _assert_type_keys(keys: Iterable[str]) -> None:
     assert all(
-        isinstance(e, str) for e in keys
-    ), f"keys should all be string, but got {keys}"
+        isinstance(e, str) and e.isidentifier() for e in keys
+    ), f"keys should all be valid Python identifiers(string), but got {keys}"
 
 
 def _parse_value(v: Any) -> Optional[Union["Batch", np.ndarray, torch.Tensor]]:
@@ -719,7 +719,9 @@ class Batch:
     def split(
         self, size: int, shuffle: bool = True, merge_last: bool = False
     ) -> Iterator["Batch"]:
-        """Split whole data into multiple small batches.
+        """Split whole data into multiple small batches. For now split method 
+        create a copy rather than reference of data because it might require 
+        shuffling.
 
         :param int size: divide the data batch with the given size, but one
             batch if the length of the batch is smaller than "size".

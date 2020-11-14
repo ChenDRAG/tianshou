@@ -23,6 +23,7 @@ def test_batch():
     b.update()
     assert b.is_empty()
     b.update(c=[3, 5])
+    b.keys()
     assert np.allclose(b.c, [3, 5])
     # mimic the behavior of dict.update, where kwargs can overwrite keys
     b.update({'a': 2}, a=3)
