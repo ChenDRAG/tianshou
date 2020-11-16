@@ -99,7 +99,6 @@ def test_td3(args=get_args()):
     train_collector = Collector(
         policy, train_envs, ReplayBuffer(args.buffer_size),
         action_noise=GaussianNoise(sigma=args.exploration_noise))
-
     test_collector = Collector(policy, test_envs)
     train_collector.collect(n_step=args.start_timesteps, random=True)
     # log
