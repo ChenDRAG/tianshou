@@ -642,13 +642,18 @@ class CachedReplayBuffer(ReplayBuffer):
         for i, b in enumerate(cached_bufs_slice):
             b.add(obs[i], act[i], rew[i], done[i],
                     obs_next[i], info[i], policy[i])
-        self._main_buf_update()
+        return self._main_buf_update()
 
     def _main_buf_update(self):
-        for buf in self.cached_bufs:
+        lens = np.zeros((self.cached_bufs_n, ))
+        rews = np.zeros((self.cached_bufs_n, ))
+        for i, buf in enumerate(self.cached_bufs):
             if buf.done[buf._index - 1] > 0:
-                self.main_buf.update(buf)#TODO this can be greatly improved
+                self.main_buf.update(buf) #TODO this can be greatly improved
+                lens[i] = len(buf)
+                rews[i] = np.sum(buf.rew[:lens[i]])
                 buf.reset()
+        return lens, rews
 
     def reset(self) -> None:
         for buf in self.cached_bufs:
@@ -708,189 +713,3 @@ class CachedReplayBuffer(ReplayBuffer):
             end = start + buf._maxsize
             buf.set_batch(self._meta[start: end])
             start = end
-
-       
-
-    #random from all buffers
-
-# class CachedReplayBuffer:
-#     """basically a list of buffer, detail can be found at buffer individually,
-#     from outside this is only a normal buffer. index reshape & data concatenate
-#     """
-#     def __init__(
-#         self,
-#         size: int,
-#         cached_buf_n: int,
-#         max_length: int,
-#         **kwargs: Any,
-#     ) -> None:
-#         """
-#         tell how many buffer 
-#         TODO support stack
-#         """
-#         assert(size!=0), ("size should not be 0")
-#         assert(cached_buf_n!=0), ("cached_buf_n should not be 0")
-#         assert(max_length!=0), ("max_length should not be 0")
-
-#         #TODO   rethink if cached_buf_n can be 1, why CachedReplayBuffer should be buffer rather than list
-#         if cached_buf_n == 1:
-#             import warnings
-#             warnings.warn(
-#                 "CachedReplayBuffer with cached_buf_n = 1 will cause low efficiency."
-#                 "Please consider using ReplayBuffer which is not in cached form.",
-#                 Warning)
-        
-#         self.cached_bufs_n = cached_buf_n
-#         self._maxsize = size + cached_buf_n*cached_buf_n
-#         self._size = 0
-        
-#         #TODO see if we can generalize to all kinds of buffer
-#         self.main_buf = ReplayBuffer(size, **kwargs)
-#         self.cached_bufs = [ReplayBuffer(max_length, **kwargs) for _ in range(cached_buf_n)]
-
-#     def __len__(self) -> int:
-#         return np.sum([len(buf) for buf in self.cached_bufs]) + len(self.main_buf)
-
-#     def __repr__(self) -> str:
-#         return {'main_buffer': self.main_buf, 'cached_buffers': self.cached_bufs}.__repr__()
-
-#     def __getattr__(self, key: str) -> Any:
-#         """Return self.key."""
-#         return 
-        
-#         try:
-#             return self._meta[key]
-#         except KeyError as e:
-#             raise AttributeError from e
-
-#     def add(
-#         self,
-#         obs: Any,
-#         act: Any,
-#         rew: Union[Number, np.number, np.ndarray],
-#         done: Union[Number, np.number, np.bool_],
-#         obs_next: Any = None,
-#         info: Optional[Union[dict, Batch]] = {},
-#         policy: Optional[Union[dict, Batch]] = {},
-#         index: Union[Number, np.number] = None) -> None:
-#         """
-        
-#         """
-#         if index is None:
-#             assert obs.shape[0] == self.cached_bufs_n
-#             for i, b in enumerate(self.cached_bufs):
-#                 b.add(obs[i], act[i], rew[i], done[i],
-#                       obs_next[i], info[i], policy[i])
-#         else:
-#             self.cached_bufs[index].add(obs, act, rew, done, obs_next, info, policy)
-
-#     def reset(self) -> None:
-#         for buf in self.cached_bufs:
-#             buf.reset()
-
-#     def update(self, buffers, index) -> None:
-#         """
-#         Update buffers to buffers[index] when When index is not None.
-#         Otherwise buffers should be a list of n buffer.
-#         """
-#         if index is None:
-#             for target_b, source_b in zip(self.cached_bufs, buffers):
-#                 target_b.update(source_b)
-#         else:
-#             self.cached_bufs[index].update(buffers)
-
-#     def sample():
-#         pass#random from all buffers
-
-# class VecBuffer:
-#     """basically a list of buffer, detail can be found at buffer individually,
-#     from outside this is only a normal buffer. index reshape & data concatenate
-#     """
-#     def __init__(
-#         self,
-#         size: int,
-#         buffer_n: int,
-#         **kwargs: Any,
-#     ) -> None:
-#         """
-#         tell how many buffer 
-#         TODO support stack
-#         """
-#         assert(size!=0 and buffer_n!=0), ("size should be an integral multiple of buffer_n. "
-#                                           "Both should not be 0.")
-#         if buffer_n == 1:
-#             import warnings
-#             warnings.warn(
-#                 "BufferVec with buffer_n = 1 will cause low efficiency."
-#                 "Please consider using ReplayBuffer which is not in vector form.",
-#                 Warning)   
-#         if size%buffer_n != 0:
-#             size = (size//buffer_n + 1)*buffer_n
-#             import warnings
-#             warnings.warn(
-#                 "size should be an integral multiple of buffer_n, reassigned to {}".format(size),
-#                 Warning)
-        
-#         self.buffer_n = buffer_n
-#         self._maxsize = size
-#         # self._size = 0
-#         buffer_size = size / buffer_n
-#         #TODO see if we can generalize to all kinds of buffer
-#         self.buffers = [ReplayBuffer(buffer_size, **kwargs) for _ in range(buffer_n)]
-
-#     def __len__(self) -> int:
-#         return np.sum([len(buf) for buf in self.buffers])
-
-#     def __repr__(self) -> str:
-        
-#         # return (self.__class__.__name__ + '[\n1:' + self.buffers[0].__repr__() +
-#         #         '2:' + self.buffers[0].__class__.__name__+'()...\n...]')
-#         pass
-
-#     def __getattr__(self, key: str) -> Any:
-#         """Return self.key."""
-#         return 
-        
-#         try:
-#             return self._meta[key]
-#         except KeyError as e:
-#             raise AttributeError from e
-
-#     def add(
-#         self,
-#         obs: Any,
-#         act: Any,
-#         rew: Union[Number, np.number, np.ndarray],
-#         done: Union[Number, np.number, np.bool_],
-#         obs_next: Any = None,
-#         info: Optional[Union[dict, Batch]] = {},
-#         policy: Optional[Union[dict, Batch]] = {},
-#         index: Union[Number, np.number] = None) -> None:
-#         """
-            
-#         """
-#         if index is None:
-#             assert obs.shape[0] == self.buffer_n
-#             for i, b in enumerate(self.buffers):
-#                 b.add(obs[i], act[i], rew[i], done[i],
-#                       obs_next[i], info[i], policy[i])
-#         else:
-#             self.buffers[index].add(obs, act, rew, done, obs_next, info, policy)
-
-#     def reset(self) -> None:
-#         for buf in self.buffers:
-#             buf.reset()
-
-#     def update(self, buffers, index) -> None:
-#         """
-#         Update buffers to buffers[index] when When index is not None.
-#         Otherwise buffers should be a list of n buffer.
-#         """
-#         if index is None:
-#             for target_b, source_b in zip(self.buffers, buffers):
-#                 target_b.update(source_b)
-#         else:
-#             self.buffers[index].update(buffers)
-
-#     def sample():
-#         pass#random from all buffers

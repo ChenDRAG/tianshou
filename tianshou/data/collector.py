@@ -419,4 +419,129 @@ class stepCollector(Collector):
         reward_metric: Optional[Callable[[np.ndarray], float]] = None,
     ) -> None:
         super().__init__(policy, env, buffer, preprocess_fn, action_noise, reward_metric)
-        del self._cached_buf
+        # del self._cached_buf
+
+    def reset_env(self) -> None:
+        """Reset all of the environment(s)' states and the cache buffers."""
+        self._ready_env_ids = np.arange(self.env_num)
+        obs = self.env.reset()
+        if self.preprocess_fn:
+            obs = self.preprocess_fn(obs=obs).get("obs", obs)
+        self.data.obs = obs
+        #TODO reset cached
+        if self._action_noise is not None:
+            self._action_noise.reset()
+
+    def collect(
+        self,
+        n_step: Optional[int] = None,
+        n_episode: Optional[int] = None,
+        random: bool = False,
+        render: Optional[float] = None,
+        no_grad: bool = True,
+    ) -> Dict[str, float]:
+        #collect at least n_step or n_episode
+        assert (n_step is not None and n_episode is None and n_step > 0) or (
+            n_step is None and n_episode is not None and n_episode > 0
+        ), "Only one of n_step or n_episode is allowed in Collector.collect, "
+        f"got n_step = {n_step}, n_episode = {n_episode}."
+        step_count = 0
+        # episode of each environment
+        # episode_count = np.zeros(self.env_num)
+        episode_count = 0
+        rewards = []
+        lens = []
+
+        while True:
+            if step_count >= 100000 and episode_count == 0:
+                warnings.warn(
+                    "There are already many steps in an episode. "
+                    "You should add a time limitation to your environment!",
+                    Warning)
+
+            # restore the state and the input data
+            last_state = self.data.state
+            if isinstance(last_state, Batch) and last_state.is_empty():
+                last_state = None
+
+            # calculate the next action and update state, act & policy into self.data
+            if random:
+                spaces = self._action_space
+                result = Batch(
+                    act=[spaces[i].sample() for i in self._ready_env_ids])
+            else:
+                if no_grad:
+                    with torch.no_grad():  # faster than retain_grad version
+                        # self.data.obs will be used by agent to get result(mainly action)
+                        result = self.policy(self.data, last_state)
+                else:
+                    result = self.policy(self.data, last_state)
+
+            state = result.get("state", Batch())
+            policy = result.get("policy", Batch())
+            act = to_numpy(result.act)
+            if state is None:
+                # convert None to Batch(), since None is reserved for 0-init
+                state = Batch()
+            if not (isinstance(state, Batch) and state.is_empty()):
+                # save hidden state to policy._state, in order to save into buffer
+                policy._state = state
+            if self._action_noise is not None:
+                self.data.act += self._action_noise(self.data.act.shape)
+            self.data.update(state=state, policy = policy, act = act)
+
+            # step in env
+            obs_next, rew, done, info = self.env.step(self.data.act)
+
+            # update obs_next, rew, done, & info into self.data
+            self.data.update(obs_next=obs_next, rew=rew, done=done, info=info)
+
+            if render:
+                self.env.render()
+                time.sleep(render)
+
+            # add data into the buffer
+            if self.preprocess_fn:
+                result = self.preprocess_fn(**self.data)  # type: ignore
+                self.data.update(result)
+
+            #TODO if self.buffer is None:
+            if self.buffer is not None:
+                lens, rews = self.buffer.add(**self.data)
+            else:
+                pass
+            step_count += self.env_num
+
+            done_env_ind = np.where(done)[0]
+            for i in done_env_ind:
+                episode_count += 1
+                lens.append(lens[i])
+                rewards.append(self._rew_metric(rews[i]))
+                self._reset_state(i)
+
+            # now we copy obs_next to obs, but since there might be finished episodes,
+            # we have to reset finished envs first.
+            # TODO might auto reset help?
+            if sum(done):
+                obs_reset = self.env.reset(done_env_ind)
+                if self.preprocess_fn:
+                    obs_reset = self.preprocess_fn(
+                        obs=obs_reset).get("obs", obs_reset)
+                self.data.obs_next[done_env_ind] = obs_reset
+            self.data.obs = self.data.obs_next
+
+            if n_step and step_count >= n_step:
+                break
+            elif n_episode and episode_count >= n_episode:
+                break
+
+        # generate the statistics
+        self.collect_step += step_count
+        self.collect_episode += episode_count
+        return {
+            "n/ep": episode_count,
+            "n/st": step_count,
+            "rew": np.mean(rewards),
+            "rew_std": np.std(rewards),
+            "len": np.mean(lens),
+        }
