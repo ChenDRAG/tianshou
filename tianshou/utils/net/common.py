@@ -9,7 +9,7 @@ from tianshou.data import to_torch
 def miniblock(
     inp: int,
     oup: int,
-    norm_layer: Optional[Callable[[int], nn.modules.Module]],
+    norm_layer: Optional[Callable[[int], nn.modules.Module]] = None,
 ) -> List[nn.modules.Module]:
     """Construct a miniblock with given input/output-size and norm layer."""
     ret: List[nn.modules.Module] = [nn.Linear(inp, oup)]
