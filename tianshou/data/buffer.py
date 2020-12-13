@@ -145,8 +145,8 @@ class ReplayBuffer:
         self._last_obs = save_only_last_obs
         self._index = 0
         self._size = 0
-        self.reset()
         self._meta = Batch()
+        self.reset()
 
     def __len__(self) -> int:
         """Return len(self)."""
@@ -231,7 +231,8 @@ class ReplayBuffer:
         done: Union[Number, np.number, np.bool_],
         obs_next: Any = None,
         info: Optional[Union[dict, Batch]] = {},
-        policy: Optional[Union[dict, Batch]] = {}
+        policy: Optional[Union[dict, Batch]] = {},
+        **kwargs: Any,
     ) -> None:
         """Add a batch of data into replay buffer.
         expect all input to be batch, dict, or numpy array"""
@@ -471,7 +472,8 @@ class PrioritizedReplayBuffer(ReplayBuffer):
         obs_next: Any = None,
         info: Optional[Union[dict, Batch]] = {},
         policy: Optional[Union[dict, Batch]] = {},
-        weight: Optional[Union[Number, np.number]] = None) -> None:
+        weight: Optional[Union[Number, np.number]] = None,
+        **kwargs: Any) -> None:
         """Add a batch of data into replay buffer."""
         if weight is None:
             weight = self._max_prio
@@ -616,28 +618,37 @@ class CachedReplayBuffer(ReplayBuffer):
         info: Optional[Union[dict, Batch]] = {},
         policy: Optional[Union[dict, Batch]] = {},
         index: Optional[Union[int, np.integer, np.ndarray, List[int]]] = None,
+        **kwargs: Any
         ) -> None:
         """
         
         """
-        
-        obs = np.atleast_1d(obs)
-        act = np.atleast_1d(act)
-        rew = np.atleast_1d(rew)
-        done = np.atleast_1d(done)
-        obs_next = np.atleast_1d([None]*self.cached_bufs_n) if obs_next is None else np.atleast_1d(obs_next)
-        info = np.atleast_1d([{}]*self.cached_bufs_n) if info == {} else np.atleast_1d(info)
-        policy = np.atleast_1d([{}]*self.cached_bufs_n) if policy == {} else np.atleast_1d(policy)
-
-        #TODO what if data is already in episode, what is i want to add mutiple data ?
-        #can accelerate
-        if self._meta.is_empty():
-            self._cache_initialise(obs[0], act[0], rew[0], done[0], obs_next[0],
-                                    info[0], policy[0])
         if index is None:
             index = range(self.cached_bufs_n)
         index = np.atleast_1d(index).astype(np.int)
         assert(index.ndim == 1)
+
+        obs = np.atleast_1d(obs)
+        act = np.atleast_1d(act)
+        rew = np.atleast_1d(rew)
+        done = np.atleast_1d(done)
+        #ugly code TODO
+        if isinstance(obs_next, Batch) and obs_next.is_empty():
+            obs_next = None
+        if isinstance(info, Batch) and info.is_empty():
+            info = {}
+        if isinstance(policy, Batch) and policy.is_empty():
+            policy = {}
+        obs_next = np.atleast_1d([None]*len(index)) if obs_next is None else np.atleast_1d(obs_next)
+        info = np.atleast_1d([{}]*len(index)) if info == {} else np.atleast_1d(info)
+        policy = np.atleast_1d([{}]*len(index)) if policy == {} else np.atleast_1d(policy)
+
+        #TODO what if data is already in episode, what if i want to add mutiple data ?
+        #can accelerate
+        if self._meta.is_empty():
+            self._cache_initialise(obs[0], act[0], rew[0], done[0], obs_next[0],
+                                    info[0], policy[0])
+        #now we add data to selected cached_bufs one by one
         cached_bufs_slice = self.cached_bufs[index]
         for i, b in enumerate(cached_bufs_slice):
             b.add(obs[i], act[i], rew[i], done[i],
@@ -647,13 +658,15 @@ class CachedReplayBuffer(ReplayBuffer):
     def _main_buf_update(self):
         lens = np.zeros((self.cached_bufs_n, ))
         rews = np.zeros((self.cached_bufs_n, ))
+        start_indexs = np.zeros((self.cached_bufs_n, ))
         for i, buf in enumerate(self.cached_bufs):
             if buf.done[buf._index - 1] > 0:
-                self.main_buf.update(buf) #TODO this can be greatly improved
                 lens[i] = len(buf)
                 rews[i] = np.sum(buf.rew[:lens[i]])
+                start_indexs[i] = self.main_buf._index
+                self.main_buf.update(buf) #TODO this can be greatly improved
                 buf.reset()
-        return lens, rews
+        return lens, rews, start_indexs
 
     def reset(self) -> None:
         for buf in self.cached_bufs:

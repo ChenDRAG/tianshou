@@ -3,7 +3,7 @@ from tianshou.data.utils.converter import to_numpy, to_torch, to_torch_as
 from tianshou.data.utils.segtree import SegmentTree
 from tianshou.data.buffer import ReplayBuffer, \
     ListReplayBuffer, PrioritizedReplayBuffer, CachedReplayBuffer
-from tianshou.data.collector import Collector
+from tianshou.data.collector import Collector, BasicCollector
 
 __all__ = [
     "Batch",
@@ -16,4 +16,5 @@ __all__ = [
     "PrioritizedReplayBuffer",
     "Collector",
     "CachedReplayBuffer",
+    "BasicCollector"
 ]
