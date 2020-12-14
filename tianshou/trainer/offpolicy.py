@@ -231,8 +231,9 @@ def offpolicy_trainer_basic(
                             stat[k] = MovAvg()
                         stat[k].add(losses[k])
                         # data[k] = f"{stat[k].get():.6f}"
-                        if writer and gradient_step - last_gradient_step > log_interval:
-                            last_gradient_step = gradient_step
+                    if writer and gradient_step - last_gradient_step > log_interval:
+                        last_gradient_step = gradient_step
+                        for k in losses.keys():                        
                             writer.add_scalar(
                                 k, stat[k].get(), global_step=gradient_step)
                     t.update(1)
