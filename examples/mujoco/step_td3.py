@@ -35,6 +35,7 @@ def get_args():
     parser.add_argument('--epoch', type=int, default=250)
     parser.add_argument('--step-per-epoch', type=int, default=5000)
     parser.add_argument('--collect-per-step', type=int, default=1)
+    parser.add_argument('--update-per-step', type=int, default=1)
     parser.add_argument('--batch-size', type=int, default=256)
     parser.add_argument('--layer-num', type=int, default=1)
     parser.add_argument('--training-num', type=int, default=1)
@@ -117,7 +118,8 @@ def test_td3(args=get_args()):
     result = offpolicy_trainer_basic(
         policy, train_collector, test_collector, args.epoch,
         args.step_per_epoch, args.collect_per_step, args.test_num,
-        args.batch_size, writer=writer, log_interval=args.log_interval)
+        args.batch_size, update_per_step = args.update_per_step,
+        writer=writer, log_interval=args.log_interval)
 
     if __name__ == '__main__':
         pprint.pprint(result)
