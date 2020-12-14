@@ -123,12 +123,6 @@ def _create_value(
         return np.array([None for _ in range(size)])
 
 
-def _assert_type_keys(keys: Iterable[str]) -> None:
-    assert all(
-        isinstance(e, str) and e.isidentifier() for e in keys
-    ), f"keys should all be valid Python identifiers(string), but got {keys}"
-
-
 def _parse_value(v: Any) -> Optional[Union["Batch", np.ndarray, torch.Tensor]]:
     if isinstance(v, Batch):  # most often case
         return v
@@ -185,7 +179,6 @@ class Batch:
             batch_dict = deepcopy(batch_dict)
         if batch_dict is not None:
             if isinstance(batch_dict, (dict, Batch)):
-                _assert_type_keys(batch_dict.keys())
                 for k, v in batch_dict.items():
                     self.__dict__[k] = _parse_value(v)
             elif _is_batch_set(batch_dict):

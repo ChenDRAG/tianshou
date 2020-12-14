@@ -541,7 +541,7 @@ class PrioritizedReplayBuffer(ReplayBuffer):
         )
 
 class CachedReplayBuffer(ReplayBuffer):
-    """basically a list of buffer, detail can be found at buffer individually,
+    """basically a list of buffer, details can be found at buffer individually,
     from outside this is only a normal buffer. index reshape & data concatenate
     """
     def __init__(
@@ -564,7 +564,7 @@ class CachedReplayBuffer(ReplayBuffer):
         if cached_buf_n == 1:
             import warnings
             warnings.warn(
-                "CachedReplayBuffer with cached_buf_n = 1 will cause low efficiency."
+                "CachedReplayBuffer with cached_buf_n = 1 will cause low efficiency. "
                 "Please consider using ReplayBuffer which is not in cached form.",
                 Warning)
         
@@ -656,15 +656,15 @@ class CachedReplayBuffer(ReplayBuffer):
         return self._main_buf_update()
 
     def _main_buf_update(self):
-        lens = np.zeros((self.cached_bufs_n, ))
+        lens = np.zeros((self.cached_bufs_n, ), dtype = np.int)
         rews = np.zeros((self.cached_bufs_n, ))
-        start_indexs = np.zeros((self.cached_bufs_n, ))
+        start_indexs = np.zeros((self.cached_bufs_n, ), dtype = np.int)
         for i, buf in enumerate(self.cached_bufs):
             if buf.done[buf._index - 1] > 0:
                 lens[i] = len(buf)
                 rews[i] = np.sum(buf.rew[:lens[i]])
                 start_indexs[i] = self.main_buf._index
-                self.main_buf.update(buf) #TODO this can be greatly improved
+                self.main_buf.update(buf) #TODO this can be greatly improved. what if main_buf is so small(in test). Can we move data as a whole batch to save time?
                 buf.reset()
         return lens, rews, start_indexs
 

@@ -415,7 +415,7 @@ class BasicCollector:
         self,
         policy: BasePolicy,
         env: Union[gym.Env, BaseVectorEnv],
-        buffer: Optional[CachedReplayBuffer],
+        buffer: Optional[CachedReplayBuffer] = None,
         preprocess_fn: Optional[Callable[..., Batch]] = None,
         action_noise: Optional[BaseNoise] = None,
         reward_metric: Optional[Callable[[np.ndarray], float]] = None,
@@ -437,20 +437,31 @@ class BasicCollector:
         self.reset()
 
     def _check_buffer(self):
-        assert isinstance(self.buffer, CachedReplayBuffer), \
-        "BasicCollector reuqires CachedReplayBuffer as buffer input"
-        assert self.buffer.cached_bufs_n == self.env_num
+        max_episode_steps = self.env._max_episode_steps[0]
+        if self.buffer is None:
+            self.buffer = CachedReplayBuffer(size = 1,
+            cached_buf_n = self.env_num, max_length = max_episode_steps)
+        else:
+            assert isinstance(self.buffer, CachedReplayBuffer), \
+            "BasicCollector reuqires CachedReplayBuffer as buffer input"
+            assert self.buffer.cached_bufs_n == self.env_num
 
-        if self.buffer.main_buf._maxsize < \
-           self.buffer.cached_bufs_n*self.buffer.cached_bufs[0]._maxsize:
-            warnings.warn(
-                "The size of buffer is suggested to be larger than "
-                "(cached buffer number) * max_length. Otherwise you might"
-                "loss data of episodes you just collected, and statistics "
-                "might even be incorrect.",
-                Warning)        
-        #TODO
-        #if self.buffer.cached_bufs[0]._maxsize is too small give a warning
+            if self.buffer.main_buf._maxsize < \
+            self.buffer.cached_bufs_n*self.buffer.cached_bufs[0]._maxsize:
+                warnings.warn(
+                    "The size of buffer is suggested to be larger than "
+                    "(cached buffer number) * max_length. Otherwise you might"
+                    "loss data of episodes you just collected, and statistics "
+                    "might even be incorrect.",
+                    Warning)             
+            #TODO
+            if self.buffer.cached_bufs[0]._maxsize < max_episode_steps:
+                warnings.warn(
+                    "The size of cached_buf is suggested to be larger than "
+                    "max episode length. Otherwise you might"
+                    "loss data of episodes you just collected, and statistics "
+                    "might even be incorrect.",
+                    Warning)
 
     @staticmethod
     def _default_rew_metric(
@@ -529,6 +540,7 @@ class BasicCollector:
         rewards = []
         lens = []
         start_idxs = []
+        add_indexes = [i for i in range(self.env_num)]
 
         while True:
             if step_count >= 100000 and episode_count == 0:
@@ -582,31 +594,37 @@ class BasicCollector:
             if self.preprocess_fn:
                 result = self.preprocess_fn(**self.data)  # type: ignore
                 self.data.update(result)
-
-            #TODO if self.buffer is None:
-            if self.buffer is not None:
-                glens, rews, idxs = self.buffer.add(**self.data)
-            else:
-                pass
-            step_count += self.env_num
-
-            done_env_ind = np.where(done)[0]
-            for i in done_env_ind:
-                episode_count += 1
-                lens.append(glens[i])
-                rewards.append(self._rew_metric(rews[i]))
-                start_idxs.append(idxs[i])
-                self._reset_state(i)
-
-            # now we copy obs_next to obs, but since there might be finished episodes,
-            # we have to reset finished envs first.
-            # TODO might auto reset help?
+            
+            data_t = self.data
+            if n_episode and len(add_indexes) < self.env_num:
+                data_t  = self.data[add_indexes]
+            glens, rews, idxs = self.buffer.add(**data_t, index = add_indexes)
+            
+            step_count += len(add_indexes)
             if sum(done):
+                done_env_ind = np.where(done)[0]
+                # now we collect statistics
+                for i in done_env_ind:
+                    if i in add_indexes:
+                        episode_count += 1
+                        lens.append(glens[i])
+                        rewards.append(self._rew_metric(rews[i]))
+                        start_idxs.append(idxs[i])
+                # now we copy obs_next to obs, but since there might be finished episodes,
+                # we have to reset finished envs first.
+                # TODO might auto reset help?
                 obs_reset = self.env.reset(done_env_ind)
                 if self.preprocess_fn:
                     obs_reset = self.preprocess_fn(
                         obs=obs_reset).get("obs", obs_reset)
                 self.data.obs_next[done_env_ind] = obs_reset
+                for i in done_env_ind:
+                    self._reset_state(i)
+                    if n_episode and n_episode - episode_count < self.env_num:
+                        try:
+                            add_indexes.remove(i)
+                        except ValueError:
+                            pass
             self.data.obs = self.data.obs_next
 
             if n_step and step_count == n_step:
@@ -619,6 +637,8 @@ class BasicCollector:
         # generate the statistics
         self.collect_step += step_count
         self.collect_episode += episode_count
+        if n_episode:
+            self.reset_env()
         return {
             "n/ep": episode_count,
             "n/st": step_count,
