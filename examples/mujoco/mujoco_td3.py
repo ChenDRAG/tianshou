@@ -1,3 +1,4 @@
+import free_mjc
 import os
 import datetime
 

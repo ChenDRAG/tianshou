@@ -231,7 +231,7 @@ class BasePolicy(ABC, nn.Module):
         :param batch: a data batch, which is equal to buffer[indice].
         :type batch: :class:`~tianshou.data.Batch`
         :param buffer: a data buffer which contains several full-episode data
-            chronologically.
+            chronologically.?
         :type buffer: :class:`~tianshou.data.ReplayBuffer`
         :param indice: sampled timestep.
         :type indice: numpy.ndarray
@@ -256,7 +256,7 @@ class BasePolicy(ABC, nn.Module):
         else:
             mean, std = 0.0, 1.0
         buf_len = len(buffer)
-        terminal = (indice + n_step - 1) % buf_len
+        terminal = indice + n_step - 1
         target_q_torch = target_q_fn(buffer, terminal).flatten()  # (bsz, )
         target_q = to_numpy(target_q_torch)
 
@@ -314,7 +314,7 @@ def _nstep_return(
     returns = np.zeros(indice.shape)
     gammas = np.full(indice.shape, n_step)
     for n in range(n_step - 1, -1, -1):
-        now = (indice + n) % buf_len
+        now = indice + n
         gammas[done[now] > 0] = n
         returns[done[now] > 0] = 0.0
         returns = (rew[now] - mean) / std + gamma * returns

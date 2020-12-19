@@ -258,7 +258,6 @@ class Collector(object):
                         #self.data.obs will be used by agent to get result(mainly action)
                         result = self.policy(self.data, last_state)
                 else:
-                    assert(False)
                     result = self.policy(self.data, last_state)
             state = result.get("state", Batch())
             policy = result.get("policy", Batch())
@@ -270,7 +269,7 @@ class Collector(object):
                 # save hidden state to policy._state, in order to save into buffer
                 policy._state = state
             if self._action_noise is not None:
-                self.data.act += self._action_noise(self.data.act.shape)
+                act += self._action_noise(act.shape)
             self.data.update(state=state, policy = policy, act = act)
 
             # step in env
@@ -432,7 +431,7 @@ class BasicCollector:
         self.process_fn = policy.process_fn
         self._action_space = env.action_space
         self._action_noise = action_noise
-        self._rew_metric = reward_metric or Collector._default_rew_metric
+        self._rew_metric = reward_metric or BasicCollector._default_rew_metric
         # avoid creating attribute outside __init__
         self.reset()
 
@@ -499,7 +498,6 @@ class BasicCollector:
     def reset_env(self) -> None:
         """Reset all of the environment(s)' states and the cache buffers."""
         #should not be exposed
-        self._ready_env_ids = np.arange(self.env_num)
         obs = self.env.reset()
         if self.preprocess_fn:
             obs = self.preprocess_fn(obs=obs).get("obs", obs)
@@ -558,7 +556,7 @@ class BasicCollector:
             if random:
                 spaces = self._action_space
                 result = Batch(
-                    act=[spaces[i].sample() for i in self._ready_env_ids])
+                    act=[spaces[i].sample() for i in range(self.env_num)])
             else:
                 if no_grad:
                     with torch.no_grad():  # faster than retain_grad version
@@ -601,6 +599,7 @@ class BasicCollector:
             glens, rews, idxs = self.buffer.add(**data_t, index = add_indexes)
             
             step_count += len(add_indexes)
+            obs_next = self.data.obs_next
             if sum(done):
                 done_env_ind = np.where(done)[0]
                 # now we collect statistics
@@ -617,7 +616,7 @@ class BasicCollector:
                 if self.preprocess_fn:
                     obs_reset = self.preprocess_fn(
                         obs=obs_reset).get("obs", obs_reset)
-                self.data.obs_next[done_env_ind] = obs_reset
+                obs_next[done_env_ind] = obs_reset
                 for i in done_env_ind:
                     self._reset_state(i)
                     if n_episode and n_episode - episode_count < self.env_num:
@@ -625,7 +624,7 @@ class BasicCollector:
                             add_indexes.remove(i)
                         except ValueError:
                             pass
-            self.data.obs = self.data.obs_next
+            self.data.obs = obs_next
 
             if n_step and step_count == n_step:
                 assert step_count <= n_step

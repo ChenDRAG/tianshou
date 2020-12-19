@@ -473,7 +473,8 @@ class PrioritizedReplayBuffer(ReplayBuffer):
         info: Optional[Union[dict, Batch]] = {},
         policy: Optional[Union[dict, Batch]] = {},
         weight: Optional[Union[Number, np.number]] = None,
-        **kwargs: Any) -> None:
+        **kwargs: Any,
+    ) -> None:
         """Add a batch of data into replay buffer."""
         if weight is None:
             weight = self._max_prio
@@ -482,7 +483,7 @@ class PrioritizedReplayBuffer(ReplayBuffer):
             self._max_prio = max(self._max_prio, weight)
             self._min_prio = min(self._min_prio, weight)
         self.weight[self._index] = weight ** self._alpha
-        super().add(obs, act, rew, done, obs_next, info, policy)
+        super().add(obs, act, rew, done, obs_next, info, policy, **kwargs)
 
     def sample(self, batch_size: int) -> Tuple[Batch, np.ndarray]:
         """Get a random sample from buffer with priority probability.
