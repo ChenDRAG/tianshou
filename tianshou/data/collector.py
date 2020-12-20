@@ -416,7 +416,7 @@ class BasicCollector:
         env: Union[gym.Env, BaseVectorEnv],
         buffer: Optional[CachedReplayBuffer] = None,
         preprocess_fn: Optional[Callable[..., Batch]] = None,
-        action_noise: Optional[BaseNoise] = None,
+        training = False,
         reward_metric: Optional[Callable[[np.ndarray], float]] = None,
     ) -> None:
         super().__init__()
@@ -430,8 +430,8 @@ class BasicCollector:
         self.preprocess_fn = preprocess_fn
         self.process_fn = policy.process_fn
         self._action_space = env.action_space
-        self._action_noise = action_noise
         self._rew_metric = reward_metric or BasicCollector._default_rew_metric
+        self.training = training
         # avoid creating attribute outside __init__
         self.reset()
 
@@ -483,8 +483,6 @@ class BasicCollector:
         self.reset_env()
         self.reset_buffer()
         self.reset_stat()
-        if self._action_noise is not None:
-            self._action_noise.reset()
 
     def reset_stat(self) -> None:
         """Reset the statistic variables."""
@@ -574,8 +572,8 @@ class BasicCollector:
             if not (isinstance(state, Batch) and state.is_empty()):
                 # save hidden state to policy._state, in order to save into buffer
                 policy._state = state
-            if self._action_noise is not None:
-                act += self._action_noise(act.shape)
+            if self.training:
+                act = self.policy.add_exp_noise(act)
             self.data.update(state=state, policy = policy, act = act)
 
             # step in env

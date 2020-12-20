@@ -143,8 +143,6 @@ class DDPGPolicy(BasePolicy):
         #TODO why need state
         actions, h = model(obs, state=state, info=batch.info)
         actions += self._action_bias
-        if self._noise and not self.updating:
-            actions += to_torch_as(self._noise(actions.shape), actions)
         actions = actions.clamp(self._range[0], self._range[1])
         return Batch(act=actions, state=h)
 
@@ -168,3 +166,9 @@ class DDPGPolicy(BasePolicy):
             "loss/actor": actor_loss.item(),
             "loss/critic": critic_loss.item(),
         }
+
+    def add_exp_noise(self, act):
+        if self._noise:
+            act = act + self._noise(act.shape)
+            act = act.clip(self._range[0], self._range[1])
+        return act

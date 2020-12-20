@@ -39,7 +39,6 @@ def test_episode_basic(
     test_fn: Optional[Callable[[int, Optional[int]], None]],
     epoch: int,
     n_episode: Union[int, List[int]],
-    writer: Optional[SummaryWriter] = None,
     global_step: Optional[int] = None,
 ) -> Dict[str, float]:
     """A simple wrapper of testing policy in collector."""
@@ -47,19 +46,6 @@ def test_episode_basic(
     if test_fn:
         test_fn(epoch, global_step)
     result = collector.collect(n_episode=n_episode)
-    result['rew'] = result['rews'].mean()
-    result['len'] = result['lens'].mean()
-    result['rew_std'] = result['rews'].std()
-    result['len_std'] = result['lens'].std()
-    if writer is not None:
-        writer.add_scalar(
-            "test/rew", result['rew'], global_step=global_step)
-        writer.add_scalar(
-            "test/len", result["len"], global_step=global_step)
-        writer.add_scalar(
-            "test/rew_std", result['rew_std'], global_step=global_step)
-        writer.add_scalar(
-            "test/len_std", result["len_std"], global_step=global_step)
     return result
 
 def gather_info(

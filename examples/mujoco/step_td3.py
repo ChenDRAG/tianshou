@@ -15,6 +15,7 @@ from tianshou.exploration import GaussianNoise
 from tianshou.trainer import offpolicy_trainer, offpolicy_trainer_basic
 from tianshou.data import Collector, ReplayBuffer, CachedReplayBuffer, BasicCollector
 from tianshou.utils.net.continuous import Actor, Critic
+from tianshou.utils import DefaultStepLogger
 
 
 def get_args():
@@ -92,7 +93,7 @@ def test_td3(args=get_args()):
         actor, actor_optim, critic1, critic1_optim, critic2, critic2_optim,
         action_range=[env.action_space.low[0], env.action_space.high[0]],
         tau=args.tau, gamma=args.gamma,
-        exploration_noise=None,
+        exploration_noise=GaussianNoise(sigma=args.exploration_noise),
         policy_noise=args.policy_noise,
         update_actor_freq=args.update_actor_freq,
         noise_clip=args.noise_clip)
@@ -100,8 +101,7 @@ def test_td3(args=get_args()):
     cb = CachedReplayBuffer(size = args.buffer_size, cached_buf_n = args.training_num, max_length = 1000)
     cb_test = CachedReplayBuffer(size = args.buffer_size, cached_buf_n = args.test_num, max_length = 1000)#TODO this is not necessary
     train_collector = BasicCollector(
-        policy, train_envs, cb,
-        action_noise=GaussianNoise(sigma=args.exploration_noise))
+        policy, train_envs, cb, training=True)
     test_collector = BasicCollector(policy, test_envs, cb_test)#TODO test method write
     train_collector.collect(n_step=args.start_timesteps, random=True)
     # cb = ReplayBuffer(args.buffer_size)
@@ -113,13 +113,14 @@ def test_td3(args=get_args()):
     log_path = os.path.join(args.logdir, args.task, 'td3', 'seed_' + str(
         args.seed) + '_' + datetime.datetime.now().strftime('%m%d-%H%M%S'))
     writer = SummaryWriter(log_path)
+    logger = DefaultStepLogger(writer)
 
     # trainer
     result = offpolicy_trainer_basic(
         policy, train_collector, test_collector, args.epoch,
         args.step_per_epoch, args.collect_per_step, args.test_num,
         args.batch_size, update_per_step = args.update_per_step,
-        writer=writer, log_interval=args.log_interval)
+        logger=logger)
 
     if __name__ == '__main__':
         pprint.pprint(result)

@@ -5,7 +5,7 @@ from typing import Dict, List, Union, Callable, Optional
 
 from tianshou.data import Collector
 from tianshou.policy import BasePolicy
-from tianshou.utils import tqdm_config, MovAvg
+from tianshou.utils import tqdm_config, MovAvg, LazyLogger
 from tianshou.trainer import test_episode, gather_info, test_episode_basic
 
 
@@ -126,7 +126,7 @@ def offpolicy_trainer(
                             stat[k] = MovAvg()
                         stat[k].add(losses[k])
                         data[k] = f"{stat[k].get():.6f}"
-                        if writer and gradient_step % log_interval == 0:
+                        if writer and gradient_step % log_interval == 10000:
                             writer.add_scalar(
                                 k, stat[k].get(), global_step=gradient_step)
                     t.update(1)
@@ -165,12 +165,13 @@ def offpolicy_trainer_basic(
     test_fn: Optional[Callable[[int, Optional[int]], None]] = None,
     stop_fn: Optional[Callable[[float], bool]] = None,
     save_fn: Optional[Callable[[BasePolicy], None]] = None,
-    writer: Optional[SummaryWriter] = None,
-    log_interval: int = 1,
+    # writer: Optional[SummaryWriter] = None,
+    logger = LazyLogger(),
+    # log_interval: int = 1,
     verbose: bool = True,
     test_in_train: bool = True,
 ) -> Dict[str, Union[float, str]]:
-    env_step, last_env_step, gradient_step, last_gradient_step = 0, 0, 0, 0
+    env_step, gradient_step = 0, 0
     best_epoch, best_reward, best_reward_std = -1, -1.0, 0.0
     stat: Dict[str, MovAvg] = {}
     train_collector.reset_stat()
@@ -187,38 +188,17 @@ def offpolicy_trainer_basic(
                     train_fn(epoch, env_step)
                 result = train_collector.collect(n_step=collect_per_step)
                 env_step += int(result["n/st"])
-                if result["n/ep"] > 0:
-                    result['rew'] = result['rews'].mean()
-                    result['len'] = result['lens'].mean()
-                # data = {
-                #     "env_step": str(env_step),
-                #     "rew": f"{result['rew']:.2f}",
-                #     "len": str(int(result["len"])),
-                #     "n/ep": str(int(result["n/ep"])),
-                #     "n/st": str(int(result["n/st"])),
-                # }#should be deleted or altered TODO
-                if writer and env_step - last_env_step >= log_interval:
-                    last_env_step = env_step
-                    writer.add_scalar(
-                        "train/n/ep", result["n/ep"], global_step=env_step)
-                    writer.add_scalar(
-                        "train/n/st", result["n/st"], global_step=env_step)               
-                    if result["n/ep"] > 0:
-                        writer.add_scalar(
-                            "train/rew", result['rew'], global_step=env_step)
-                        writer.add_scalar(
-                            "train/len", result["len"], global_step=env_step)            
+                logger.log_traindata(result, env_step, gradient_step)
 
                 if test_in_train and stop_fn and stop_fn(result["rew"]):
                     test_result = test_episode_basic(
                         policy, test_collector, test_fn,
-                        epoch, episode_per_test, writer, env_step)
+                        epoch, episode_per_test, env_step)
+                    logger.log_testdata(test_result, env_step, gradient_step)
                     if stop_fn(test_result["rew"]):
                         if save_fn:
                             save_fn(policy)
-                        # for k in result.keys():
-                        #     data[k] = f"{result[k]:.2f}"
-                        # t.set_postfix(**data)
+                        logger.global_log()
                         return
                     else:
                         policy.train()
@@ -230,31 +210,29 @@ def offpolicy_trainer_basic(
                         if stat.get(k) is None:
                             stat[k] = MovAvg()
                         stat[k].add(losses[k])
-                        # data[k] = f"{stat[k].get():.6f}"
-                    if writer and gradient_step - last_gradient_step > log_interval:
-                        last_gradient_step = gradient_step
-                        for k in losses.keys():                        
-                            writer.add_scalar(
-                                k, stat[k].get(), global_step=gradient_step)
+                    for k in losses.keys():
+                        losses[k] = stat[k].get()
+                    logger.log_updatedata(losses, env_step, gradient_step)
                     t.update(1)
-                    # t.set_postfix(**data)
             if t.n <= t.total:
                 t.update()
         # test
-        result = test_episode_basic(policy, test_collector, test_fn, epoch,
-                              episode_per_test, writer, env_step)
+        test_result = test_episode_basic(policy, test_collector, test_fn, epoch,
+                              episode_per_test, env_step)
+        logger.log_testdata(test_result, env_step, gradient_step)
 
         #log  test in train
-        if best_epoch == -1 or best_reward < result["rew"]:
-            best_reward, best_reward_std = result["rew"], result["rew_std"]
+        if best_epoch == -1 or best_reward < test_result["rew"]:
+            best_reward, best_reward_std = test_result["rew"], test_result["rew_std"]
             best_epoch = epoch
             if save_fn:
                 save_fn(policy)
         if verbose:
-            print(f"Epoch #{epoch}: test_reward: {result['rew']:.6f} ± "
-                  f"{result['rew_std']:.6f}, best_reward: {best_reward:.6f} ± "
+            print(f"Epoch #{epoch}: test_reward: {test_result['rew']:.6f} ± "
+                  f"{test_result['rew_std']:.6f}, best_reward: {best_reward:.6f} ± "
                   f"{best_reward_std:.6f} in #{best_epoch}")
         if stop_fn and stop_fn(best_reward):
             break
     #TODO return gather info
+    logger.global_log()
     return
