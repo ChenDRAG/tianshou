@@ -68,6 +68,8 @@ class DDPGPolicy(BasePolicy):
         assert 0.0 <= gamma <= 1.0, "gamma should be in [0, 1]"
         self._gamma = gamma
         self._noise = exploration_noise
+        if self._noise:
+            self._noise.reset()
         self._range = action_range
         self._action_bias = (action_range[0] + action_range[1]) / 2.0
         self._action_scale = (action_range[1] - action_range[0]) / 2.0
@@ -106,13 +108,14 @@ class DDPGPolicy(BasePolicy):
             target_q = self.critic_old(
                 batch.obs_next,
                 self(batch, model='actor_old', input='obs_next').act)
+        if self._rm_done:
+            mask = (~batch.done)|(batch.info['TimeLimit.truncated'])
+            target_q = target_q.flatten()*to_torch_as(mask, target_q)
         return target_q
 
     def process_fn(
         self, batch: Batch, buffer: ReplayBuffer, indice: np.ndarray
     ) -> Batch:
-        if self._rm_done:
-            batch.done = batch.done * 0.0
         batch = self.compute_nstep_return(
             batch, buffer, indice, self._target_q,
             self._gamma, self._n_step, self._rew_norm)

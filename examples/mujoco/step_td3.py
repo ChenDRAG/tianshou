@@ -49,6 +49,12 @@ def get_args():
         default='cuda' if torch.cuda.is_available() else 'cpu')
     return parser.parse_args()
 
+def preprocess_fn(**kwargs):
+    if 'info' in kwargs:
+        for info_dict in kwargs['info']:
+            if 'TimeLimit.truncated' not in kwargs['info']:
+                info_dict['TimeLimit.truncated'] = False
+    return kwargs
 
 def test_td3(args=get_args()):
     env = gym.make(args.task)
@@ -96,12 +102,13 @@ def test_td3(args=get_args()):
         exploration_noise=GaussianNoise(sigma=args.exploration_noise),
         policy_noise=args.policy_noise,
         update_actor_freq=args.update_actor_freq,
-        noise_clip=args.noise_clip)
+        noise_clip=args.noise_clip,
+        ignore_done=True)
     # collector
     cb = CachedReplayBuffer(size = args.buffer_size, cached_buf_n = args.training_num, max_length = 1000)
     cb_test = CachedReplayBuffer(size = args.buffer_size, cached_buf_n = args.test_num, max_length = 1000)#TODO this is not necessary
     train_collector = BasicCollector(
-        policy, train_envs, cb, training=True)
+        policy, train_envs, cb, preprocess_fn = preprocess_fn, training=True)
     test_collector = BasicCollector(policy, test_envs, cb_test)#TODO test method write
     train_collector.collect(n_step=args.start_timesteps, random=True)
     # cb = ReplayBuffer(args.buffer_size)

@@ -4,7 +4,7 @@ from copy import deepcopy
 from typing import Any, Dict, Tuple, Optional
 
 from tianshou.policy import DDPGPolicy
-from tianshou.data import Batch, ReplayBuffer
+from tianshou.data import Batch, ReplayBuffer, to_torch_as
 from tianshou.exploration import BaseNoise, GaussianNoise
 
 
@@ -115,6 +115,9 @@ class TD3Policy(DDPGPolicy):
             target_q = torch.min(
                 self.critic1_old(batch.obs_next, a_),
                 self.critic2_old(batch.obs_next, a_))
+        if self._rm_done:
+            mask = (~batch.done)|(batch.info['TimeLimit.truncated'])
+            target_q = target_q.flatten()*to_torch_as(mask, target_q)
         return target_q
 
     def learn(self, batch: Batch, **kwargs: Any) -> Dict[str, float]:

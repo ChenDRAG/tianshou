@@ -255,8 +255,15 @@ class BasePolicy(ABC, nn.Module):
                 mean, std = 0.0, 1.0
         else:
             mean, std = 0.0, 1.0
-        buf_len = len(buffer)
+        assert(n_step==1)#
+        # buf_len = len(buffer)
+        #terminal must be exactly the same as nearest done, and you can calculate target q
+        #but this target q can be obs q after done so we have to manually set it to 0
+        #but if we do not 
         terminal = indice + n_step - 1
+        #some function to calculate terminal so that it donot cross episode for nstep =1 we can for now do not care
+        #now posion thos episode in fake? but we have to know when this step end if 1000 then 
+        #in half we just do not posion any data(because it never stop)
         target_q_torch = target_q_fn(buffer, terminal).flatten()  # (bsz, )
         target_q = to_numpy(target_q_torch)
 
@@ -311,13 +318,26 @@ def _nstep_return(
     std: float,
 ) -> np.ndarray:
     """Numba speedup: 0.3s -> 0.15s."""
+    # if not hasattr(_nstep_return, 'gamma_buffer'):
+    #     _nstep_return.gamma_buffer = np.ones((n_step,))
+    # if (len(_nstep_return.gamma_buffer) != n_step+1 or
+    #     not np.isclose(_nstep_return.gamma_buffer[1], gamma)):
+    #     _nstep_return.gamma_buffer = np.ones((n_step,))
+    #     for i in range(1, n_step+1):
+    #         _nstep_return.gamma_buffer[i] = _nstep_return.gamma_buffer[i-1]*gamma
+    gamma_buffer = np.ones((n_step,))
+    for i in range(1, n_step+1):
+        gamma_buffer[i] = gamma_buffer[i-1]*gamma
     returns = np.zeros(indice.shape)
+    # gammas represent #step from current indice
+    # to the end of that episode, but at most n_step.
     gammas = np.full(indice.shape, n_step)
     for n in range(n_step - 1, -1, -1):
         now = indice + n
         gammas[done[now] > 0] = n
         returns[done[now] > 0] = 0.0
         returns = (rew[now] - mean) / std + gamma * returns
-    target_q[gammas != n_step] = 0.0
-    target_q = target_q * (gamma ** gammas) + returns
+    # target_q[gammas != n_step] = 0.0
+    target_q = target_q * gamma_buffer[gammas] + returns
+    # target_q = target_q * _nstep_return.gamma_buffer[gammas] + returns
     return target_q

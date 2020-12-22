@@ -102,7 +102,6 @@ class Collector(object):
         self.buffer = buffer
         self.policy = policy
         self.preprocess_fn = preprocess_fn
-        self.process_fn = policy.process_fn
         self._action_space = env.action_space
         self._action_noise = action_noise
         self._rew_metric = reward_metric or Collector._default_rew_metric
@@ -285,18 +284,19 @@ class Collector(object):
                 self._ready_env_ids = np.array([i["env_id"] for i in info])
                 # get the stepped data
                 self.data = whole_data[self._ready_env_ids]
+            
+            result = {"obs_next":obs_next, "rew":rew, "done":done, "info":info}
+            if self.preprocess_fn:
+                result = self.preprocess_fn(**result)  # type: ignore
+            
             # update obs_next, rew, done, & info into self.data
-            self.data.update(obs_next=obs_next, rew=rew, done=done, info=info)
+            self.data.update(result)
 
             if render:
                 self.env.render()
                 time.sleep(render)
 
             # add data into the buffer
-            if self.preprocess_fn:
-                result = self.preprocess_fn(**self.data)  # type: ignore
-                self.data.update(result)
-
             # now we move self.data into cached buffer, and wait until one whole episode is collected.
             for j, i in enumerate(self._ready_env_ids):
                 # j is the index in current ready_env_ids
@@ -428,7 +428,6 @@ class BasicCollector:
         self._check_buffer()
         self.policy = policy
         self.preprocess_fn = preprocess_fn
-        self.process_fn = policy.process_fn
         self._action_space = env.action_space
         self._rew_metric = reward_metric or BasicCollector._default_rew_metric
         self.training = training
@@ -579,18 +578,18 @@ class BasicCollector:
             # step in env
             obs_next, rew, done, info = self.env.step(act)
 
+            result = {"obs_next":obs_next, "rew":rew, "done":done, "info":info}
+            if self.preprocess_fn:
+                result = self.preprocess_fn(**result)  # type: ignore
+
             # update obs_next, rew, done, & info into self.data
-            self.data.update(obs_next=obs_next, rew=rew, done=done, info=info)
+            self.data.update(result)
 
             if render:
                 self.env.render()
                 time.sleep(render)
 
             # add data into the buffer
-            if self.preprocess_fn:
-                result = self.preprocess_fn(**self.data)  # type: ignore
-                self.data.update(result)
-            
             data_t = self.data
             if n_episode and len(add_indexes) < self.env_num:
                 data_t  = self.data[add_indexes]
