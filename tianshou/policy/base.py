@@ -325,7 +325,7 @@ def _nstep_return(
     #     _nstep_return.gamma_buffer = np.ones((n_step,))
     #     for i in range(1, n_step+1):
     #         _nstep_return.gamma_buffer[i] = _nstep_return.gamma_buffer[i-1]*gamma
-    gamma_buffer = np.ones((n_step,))
+    gamma_buffer = np.ones((n_step+1,))
     for i in range(1, n_step+1):
         gamma_buffer[i] = gamma_buffer[i-1]*gamma
     returns = np.zeros(indice.shape)

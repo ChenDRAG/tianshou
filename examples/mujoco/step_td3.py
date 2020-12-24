@@ -52,7 +52,7 @@ def get_args():
 def preprocess_fn(**kwargs):
     if 'info' in kwargs:
         for info_dict in kwargs['info']:
-            if 'TimeLimit.truncated' not in kwargs['info']:
+            if 'TimeLimit.truncated' not in info_dict:
                 info_dict['TimeLimit.truncated'] = False
     return kwargs
 
