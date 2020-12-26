@@ -108,9 +108,10 @@ class DDPGPolicy(BasePolicy):
             target_q = self.critic_old(
                 batch.obs_next,
                 self(batch, model='actor_old', input='obs_next').act)
+        mask = (~batch.done)
         if self._rm_done:
-            mask = (~batch.done)|(batch.info['TimeLimit.truncated'])
-            target_q = target_q.flatten()*to_torch_as(mask, target_q)
+            mask = mask|(batch.info['TimeLimit.truncated'])
+        target_q = target_q.flatten()*to_torch_as(mask, target_q)
         return target_q
 
     def process_fn(

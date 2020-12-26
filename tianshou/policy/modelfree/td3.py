@@ -115,9 +115,10 @@ class TD3Policy(DDPGPolicy):
             target_q = torch.min(
                 self.critic1_old(batch.obs_next, a_),
                 self.critic2_old(batch.obs_next, a_))
+        mask = (~batch.done)
         if self._rm_done:
-            mask = (~batch.done)|(batch.info['TimeLimit.truncated'])
-            target_q = target_q.flatten()*to_torch_as(mask, target_q)
+            mask = mask|(batch.info['TimeLimit.truncated'])
+        target_q = target_q.flatten()*to_torch_as(mask, target_q)
         return target_q
 
     def learn(self, batch: Batch, **kwargs: Any) -> Dict[str, float]:

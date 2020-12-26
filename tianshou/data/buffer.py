@@ -400,9 +400,36 @@ class ReplayBuffer:
                 return True
         return False
     
+    def start(self, index):
+        """return start indices of given indices"""
+        assert index < len(self) and index >= 0, "Input index illegal."
+        sorted_starts = np.sort(self.starts())
+        ret = np.searchsorted(sorted_starts, index, side="right") - 1
+        ret[ret < 0] = sorted_starts[-1]
+        return ret
 
-        
+    def next(self, index):
+        "return next n step indices"
+        assert index < len(self) and index >= 0, "Input index illegal."
+        return (index + ~(self.done[index]|index==self._index))%len(self)
 
+    def starts(self):
+        """return indices of all episodes"""
+        if len(self) > 0:
+            return (self.ends()+1)%len(self)
+        else:
+            return np.array([], dtype = np.int)
+
+    def ends(self):
+        "return unfinished indices."
+        if len(self) > 0:
+            last_write_in = int((self._index - 1)%len(self))
+            if self.done[last_write_in]:
+                return np.where(self.done[:len(self)])[0]
+            else:
+                return np.append(np.where(self.done[:len(self)])[0], last_write_in)
+        else:
+            return np.array([], dtype = np.int)
 
 
 class ListReplayBuffer(ReplayBuffer):
@@ -422,6 +449,7 @@ class ListReplayBuffer(ReplayBuffer):
 
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(size=0, ignore_obs_next=False, **kwargs)
+        assert False, "unavailable for now"
 
     def sample(self, batch_size: int) -> Tuple[Batch, np.ndarray]:
         raise NotImplementedError("ListReplayBuffer cannot be sampled!")
@@ -727,3 +755,62 @@ class CachedReplayBuffer(ReplayBuffer):
             end = start + buf._maxsize
             buf.set_batch(self._meta[start: end])
             start = end
+    
+    def ends(self):
+        return np.concatenate(
+            [self.main_buf.ends(), *[b.ends() for b in self.cached_bufs]])
+
+    def starts(self):
+        return np.concatenate(
+            [self.main_buf.starts(), *[b.starts() for b in self.cached_bufs]])
+
+    def next(self, index):
+        assert index >= 0 and index < self._maxsize, "Input index illegal."
+        all_buffer = [self.main_buf, *self.cached_bufs]
+        ret = index.copy()
+        upper = 0
+        lower = 0
+        for b in all_buffer:
+            lower = upper
+            upper += b._maxsize
+            mask = ret>=lower and ret<upper
+            ret[mask] = b.next(ret[mask]-lower)+lower
+        return ret
+
+    def start(self, index):
+        """return start indices of given indices"""
+        all_buffer = [self.main_buf, *self.cached_bufs]
+        ret = np.full(index.shape, -1)
+        upper = 0
+        lower = 0
+        for b in all_buffer:
+            lower = upper
+            upper += b._maxsize
+            mask = ret>=lower and ret<upper
+            ret[mask] = b.start(ret[mask]-lower)+lower
+        return ret
+
+    def _global2local(self, global_index):
+        assert (global_index>=0 and global_index<self._maxsize).all()
+        all_buffer = [self.main_buf, *self.cached_bufs]
+        local_index = global_index.copy()
+        group_index = np.full(global_index.shape, -1)
+        upper = 0
+        lower = 0
+        for i, b in enumerate(all_buffer):
+            lower = upper
+            upper += b._maxsize
+            mask = global_index>=lower and global_index<upper
+            group_index[mask] = i
+            local_index[mask]-=lower
+        return local_index, group_index
+
+    def _local2global(self, local_index, group_index):
+        global_index = local_index.copy()
+        lowers = [0, self.main_buf._maxsize]
+        for i in range(self.cached_bufs_n -1):
+            lowers.append(lowers[-1] + self.cached_bufs[0]._max_size)
+        for i in range(len(lowers)):
+            global_index[group_index == i]+=lowers[i]
+        return global_index
+

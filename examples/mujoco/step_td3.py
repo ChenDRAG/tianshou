@@ -20,7 +20,7 @@ from tianshou.utils import DefaultStepLogger
 
 def get_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--task', type=str, default='Ant-v2')
+    parser.add_argument('--task', type=str, default='Ant-v3')
     parser.add_argument('--seed', type=int, default=0)
     parser.add_argument('--buffer-size', type=int, default=1000000)
     parser.add_argument('--hidden-layer-size', type=int, default=256)

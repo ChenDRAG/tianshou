@@ -186,7 +186,7 @@ class BasePolicy(ABC, nn.Module):
         Implementation of Generalized Advantage Estimator (arXiv:1506.02438).
 
         :param batch: a data batch which contains several full-episode data
-            chronologically.
+            chronologically.TODO generalize
         :type batch: :class:`~tianshou.data.Batch`
         :param v_s_: the value function of all next states :math:`V(s')`.
         :type v_s_: numpy.ndarray
@@ -202,6 +202,7 @@ class BasePolicy(ABC, nn.Module):
         """
         rew = batch.rew
         v_s_ = np.zeros_like(rew) if v_s_ is None else to_numpy(v_s_.flatten())
+        assert False, "needed to be modified"
         returns = _episodic_return(v_s_, rew, batch.done, gamma, gae_lambda)
         if rew_norm and not np.isclose(returns.std(), 0.0, 1e-2):
             returns = (returns - returns.mean()) / returns.std()
@@ -231,7 +232,7 @@ class BasePolicy(ABC, nn.Module):
         :param batch: a data batch, which is equal to buffer[indice].
         :type batch: :class:`~tianshou.data.Batch`
         :param buffer: a data buffer which contains several full-episode data
-            chronologically.?
+            chronologically.??
         :type buffer: :class:`~tianshou.data.ReplayBuffer`
         :param indice: sampled timestep.
         :type indice: numpy.ndarray
@@ -255,19 +256,22 @@ class BasePolicy(ABC, nn.Module):
                 mean, std = 0.0, 1.0
         else:
             mean, std = 0.0, 1.0
-        assert(n_step==1)#
-        # buf_len = len(buffer)
-        #terminal must be exactly the same as nearest done, and you can calculate target q
-        #but this target q can be obs q after done so we have to manually set it to 0
-        #but if we do not 
-        terminal = indice + n_step - 1
-        #some function to calculate terminal so that it donot cross episode for nstep =1 we can for now do not care
-        #now posion thos episode in fake? but we have to know when this step end if 1000 then 
-        #in half we just do not posion any data(because it never stop)
+        assert(n_step==1)
+        indices = [indice]
+        for _ in range(n_step - 1):
+            indices.append(buffer.next(indices[-1]))
+        indices = np.stack(indices)
+
+        # terminal indicates buffer indexes nstep after 'indice',
+        # and are truncated at the end of each episode
+        terminal = indices[-1]
         target_q_torch = target_q_fn(buffer, terminal).flatten()  # (bsz, )
         target_q = to_numpy(target_q_torch)
+        done = np.zeros(buffer.done.shape, dtype=np.bool)
+        #done != buffer.done because of possible unfinished episodes
 
-        target_q = _nstep_return(rew, buffer.done, target_q, indice,
+        done[buffer.ends()] = True
+        target_q = _nstep_return(rew, done, target_q, indices,
                                  gamma, n_step, len(buffer), mean, std)
 
         batch.returns = to_torch_as(target_q, target_q_torch)
@@ -279,8 +283,8 @@ class BasePolicy(ABC, nn.Module):
         f64 = np.array([0, 1], dtype=np.float64)
         f32 = np.array([0, 1], dtype=np.float32)
         b = np.array([False, True], dtype=np.bool_)
-        i64 = np.array([0, 1], dtype=np.int64)
-        _episodic_return(f64, f64, b, 0.1, 0.1)
+        i64 = np.array([[0, 1]], dtype=np.int64)
+        _episodic_return(f64, f64, b, 0.1, 0.1)#TODO
         _episodic_return(f32, f64, b, 0.1, 0.1)
         _nstep_return(f64, b, f32, i64, 0.1, 1, 4, 1.0, 0.0)
 
@@ -310,7 +314,7 @@ def _nstep_return(
     rew: np.ndarray,
     done: np.ndarray,
     target_q: np.ndarray,
-    indice: np.ndarray,
+    indices: np.ndarray,
     gamma: float,
     n_step: int,
     buf_len: int,
@@ -318,26 +322,17 @@ def _nstep_return(
     std: float,
 ) -> np.ndarray:
     """Numba speedup: 0.3s -> 0.15s."""
-    # if not hasattr(_nstep_return, 'gamma_buffer'):
-    #     _nstep_return.gamma_buffer = np.ones((n_step,))
-    # if (len(_nstep_return.gamma_buffer) != n_step+1 or
-    #     not np.isclose(_nstep_return.gamma_buffer[1], gamma)):
-    #     _nstep_return.gamma_buffer = np.ones((n_step,))
-    #     for i in range(1, n_step+1):
-    #         _nstep_return.gamma_buffer[i] = _nstep_return.gamma_buffer[i-1]*gamma
-    gamma_buffer = np.ones((n_step+1,))
+    gamma_buffer = np.ones(n_step+1)
     for i in range(1, n_step+1):
         gamma_buffer[i] = gamma_buffer[i-1]*gamma
-    returns = np.zeros(indice.shape)
+    returns = np.zeros(target_q.shape)
     # gammas represent #step from current indice
     # to the end of that episode, but at most n_step.
-    gammas = np.full(indice.shape, n_step)
+    gammas = np.full(target_q.shape, n_step)
     for n in range(n_step - 1, -1, -1):
-        now = indice + n
+        now = indices[n]
         gammas[done[now] > 0] = n
         returns[done[now] > 0] = 0.0
         returns = (rew[now] - mean) / std + gamma * returns
-    # target_q[gammas != n_step] = 0.0
     target_q = target_q * gamma_buffer[gammas] + returns
-    # target_q = target_q * _nstep_return.gamma_buffer[gammas] + returns
     return target_q
