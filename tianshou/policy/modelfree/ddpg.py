@@ -72,7 +72,7 @@ class DDPGPolicy(BasePolicy):
             self._noise.reset()
         self._range = action_range
         self._action_bias = (action_range[0] + action_range[1]) / 2.0
-        self._action_scale = (action_range[1] - action_range[0]) / 2.0
+        # self._action_scale = (action_range[1] - action_range[0]) / 2.0
         # it is only a little difference to use GaussianNoise
         # self.noise = OUNoise()
         self._rm_done = ignore_done
@@ -146,6 +146,7 @@ class DDPGPolicy(BasePolicy):
         obs = batch[input]
         #TODO why need state
         actions, h = model(obs, state=state, info=batch.info)
+        #this actually should all be altered in policy or net
         actions += self._action_bias
         actions = actions.clamp(self._range[0], self._range[1])
         return Batch(act=actions, state=h)

@@ -256,7 +256,6 @@ class BasePolicy(ABC, nn.Module):
                 mean, std = 0.0, 1.0
         else:
             mean, std = 0.0, 1.0
-        assert(n_step==1)
         indices = [indice]
         for _ in range(n_step - 1):
             indices.append(buffer.next(indices[-1]))

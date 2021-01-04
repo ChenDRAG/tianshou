@@ -23,9 +23,11 @@ class Actor(nn.Module):
         action_shape: Sequence[int],
         max_action: float = 1.0,
         device: Union[str, int, torch.device] = "cpu",
-        hidden_layer_size: int = 128,
+        hidden_layer_size: int = None,
     ) -> None:
         super().__init__()
+        if not hidden_layer_size:
+            hidden_layer_size = preprocess_net.model.out_dim
         self.preprocess = preprocess_net
         self.last = nn.Linear(hidden_layer_size, np.prod(action_shape))
         self._max = max_action
@@ -53,9 +55,11 @@ class Critic(nn.Module):
         self,
         preprocess_net: nn.Module,
         device: Union[str, int, torch.device] = "cpu",
-        hidden_layer_size: int = 128,
+        hidden_layer_size: int = None,
     ) -> None:
         super().__init__()
+        if not hidden_layer_size:
+            hidden_layer_size = preprocess_net.model.out_dim
         self.device = device
         self.preprocess = preprocess_net
         self.last = nn.Linear(hidden_layer_size, 1)

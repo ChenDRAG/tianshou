@@ -18,10 +18,6 @@ from tianshou.exploration import GaussianNoise
 from tianshou.trainer import offpolicy_trainer
 from tianshou.data import Collector, ReplayBuffer
 from tianshou.data import to_torch, to_torch_as
-
-# from tianshou.utils.net.continuous import Actor, Critic
-
-
 class Actor(nn.Module):
     def __init__(
         self,
@@ -100,17 +96,17 @@ def get_args():
     parser.add_argument('--task', type=str, default='Ant-v3')
     parser.add_argument('--seed', type=int, default=0)
     parser.add_argument('--buffer-size', type=int, default=1000000)
-    parser.add_argument('--hidden-layer-size', type=int, nargs='*', default=[])
+    parser.add_argument('--hidden-layer-size', type=int, nargs='*', default=[])#spinging up 256,256  ,TD3 400 300
     parser.add_argument('--actor-lr', type=float, default=1e-3)
     parser.add_argument('--critic-lr', type=float, default=1e-3)
     parser.add_argument('--gamma', type=float, default=0.99)
     parser.add_argument('--tau', type=float, default=0.005)
     parser.add_argument('--exploration-noise', type=float, default=0.1)
-    parser.add_argument("--start-timesteps", type=int, default=25000)
+    parser.add_argument("--start-timesteps", type=int, default=10000)#25000 for TD3
     parser.add_argument('--epoch', type=int, default=250)
     parser.add_argument('--step-per-epoch', type=int, default=5000)
     parser.add_argument('--collect-per-step', type=int, default=1)
-    parser.add_argument('--batch-size', type=int, default=256)
+    parser.add_argument('--batch-size', type=int, default=100)#256 for TD3
     parser.add_argument('--training-num', type=int, default=1)
     parser.add_argument('--test-num', type=int, default=10)
     parser.add_argument('--logdir', type=str, default='log')
