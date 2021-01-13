@@ -59,6 +59,7 @@ def test_ddpg(args=get_args()):
     args.state_shape = env.observation_space.shape or env.observation_space.n
     args.action_shape = env.action_space.shape or env.action_space.n
     args.max_action = env.action_space.high[0]
+    args.exploration_noise = args.exploration_noise * args.max_action
     #TODO 3 noises max action 
     # train_envs = gym.make(args.task)
     train_envs = SubprocVectorEnv(

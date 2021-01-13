@@ -72,6 +72,7 @@ class SACPolicy(DDPGPolicy):
         super().__init__(None, None, None, None, action_range, tau, gamma,
                          exploration_noise, reward_normalization, ignore_done,
                          estimation_step, **kwargs)
+        self._action_scale = (action_range[1] - action_range[0]) / 2.0
         self.actor, self.actor_optim = actor, actor_optim
         self.critic1, self.critic1_old = critic1, deepcopy(critic1)
         self.critic1_old.eval()
@@ -114,11 +115,13 @@ class SACPolicy(DDPGPolicy):
         self,
         batch: Batch,
         state: Optional[Union[dict, Batch, np.ndarray]] = None,
+        model: str = "actor",
         input: str = "obs",
         **kwargs: Any,
     ) -> Batch:
+        model = getattr(self, model)
         obs = batch[input]
-        logits, h = self.actor(obs, state=state, info=batch.info)
+        logits, h = model(obs, state=state, info=batch.info)
         assert isinstance(logits, tuple)
         dist = Independent(Normal(*logits), 1)
         if self._deterministic_eval and not self.training:
@@ -127,14 +130,18 @@ class SACPolicy(DDPGPolicy):
             x = dist.rsample()
         y = torch.tanh(x)
         act = y * self._action_scale + self._action_bias
+        #TODO check action scale and action bias
+        # __eps is used to avoid log of negative number
         y = self._action_scale * (1 - y.pow(2)) + self.__eps
+
+        # Compute logprob from Gaussian, and then apply correction for Tanh squashing.
+        # You get check out the original SAC paper (arXiv 1801.01290): Eq 21. in appendix C 
+        # to get some understanding of this equation.
         log_prob = dist.log_prob(x).unsqueeze(-1)
         log_prob = log_prob - torch.log(y).sum(-1, keepdim=True)
-        if self._noise is not None and self.training and not self.updating:
-            act += to_torch_as(self._noise(act.shape), act)
-        act = act.clamp(self._range[0], self._range[1])
+
         return Batch(
-            logits=logits, act=act, state=h, dist=dist, log_prob=log_prob)
+            logits=logits, act=act, state=h, log_prob=log_prob)
 
     def _target_q(
         self, buffer: ReplayBuffer, indice: np.ndarray
@@ -148,29 +155,18 @@ class SACPolicy(DDPGPolicy):
                 self.critic1_old(batch.obs_next, a_),
                 self.critic2_old(batch.obs_next, a_),
             ) - self._alpha * obs_next_result.log_prob
+        mask = (~batch.done)
+        if self._rm_done:
+            mask = mask|(batch.info['TimeLimit.truncated'])
+        target_q = target_q.flatten()*to_torch_as(mask, target_q)
         return target_q
 
     def learn(self, batch: Batch, **kwargs: Any) -> Dict[str, float]:
-        weight = batch.pop("weight", 1.0)
-
-        # critic 1
-        current_q1 = self.critic1(batch.obs, batch.act).flatten()
-        target_q = batch.returns.flatten()
-        td1 = current_q1 - target_q
-        critic1_loss = (td1.pow(2) * weight).mean()
-        # critic1_loss = F.mse_loss(current_q1, target_q)
-        self.critic1_optim.zero_grad()
-        critic1_loss.backward()
-        self.critic1_optim.step()
-
-        # critic 2
-        current_q2 = self.critic2(batch.obs, batch.act).flatten()
-        td2 = current_q2 - target_q
-        critic2_loss = (td2.pow(2) * weight).mean()
-        # critic2_loss = F.mse_loss(current_q2, target_q)
-        self.critic2_optim.zero_grad()
-        critic2_loss.backward()
-        self.critic2_optim.step()
+        # critic 1&2
+        critic1_loss, td1 = self._mse_optimizer(
+            batch, self.critic1, self.critic1_optim)        
+        critic2_loss, td2 = self._mse_optimizer(
+            batch, self.critic2, self.critic2_optim) 
         batch.weight = (td1 + td2) / 2.0  # prio-buffer
 
         # actor
