@@ -236,5 +236,5 @@ def offpolicy_trainer_basic(
         if stop_fn and stop_fn(best_reward):
             break
     #TODO return gather info
-    logger.global_log()
+    logger.global_log(policy = policy)
     return

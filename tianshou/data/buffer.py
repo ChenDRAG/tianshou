@@ -136,6 +136,7 @@ class ReplayBuffer:
         sample_avail: bool = False,
     ) -> None:
         super().__init__()
+        #TODO _maxsize == 0 handle
         self._maxsize = size
         self._indices = np.arange(size)
         self.stack_num = stack_num
@@ -211,6 +212,7 @@ class ReplayBuffer:
 
     def update(self, buffer: "ReplayBuffer") -> None:
         """Move the data from the given buffer to self."""
+         #TODO this can be greatly improved. what if main_buf is so small(in test). Can we move data as a whole batch to save time?
         if len(buffer) == 0:
             return
         i = begin = buffer._index % len(buffer)
@@ -585,7 +587,6 @@ class CachedReplayBuffer(ReplayBuffer):
         TODO support stack
         """
         
-        assert size!=0 , "size should not be 0"
         assert cached_buf_n!=0 , "cached_buf_n should not be 0"
         assert max_length!=0 , "max_length should not be 0"
 
@@ -599,7 +600,7 @@ class CachedReplayBuffer(ReplayBuffer):
         
         _maxsize = size+cached_buf_n*max_length
         self.cached_bufs_n = cached_buf_n
-        #TODO see if we can generalize to all kinds of buffer  should be read only， buf for now we don't protect
+        # TODO see if we can generalize to all kinds of buffer should be read only， buf for now we don't protect
         self.main_buf = ReplayBuffer(size, **kwargs)
         self.cached_bufs = np.array([ReplayBuffer(max_length, **kwargs)
                                         for _ in range(cached_buf_n)])
@@ -619,22 +620,23 @@ class CachedReplayBuffer(ReplayBuffer):
         #now treat buffer like a normal ReplayBuffer and remove those incomplete steps
         if len(buffer) == 0:
             return 0
-        ret = 0
+        diposed_count = 0
+        # TODO use standard API now
         end = (buffer._index - 1) % len(buffer)
         begin = buffer._index % len(buffer)
         while True:
             if buffer.done[end] > 0:
                 break
             else:
-                ret = ret + 1
+                diposed_count = diposed_count + 1
                 if end == begin:
-                    assert ret == len(self)
-                    return ret
+                    assert diposed_count == len(self)
+                    return diposed_count
                 end = (end - 1) % len(buffer)
         while True:
             self.main_buf.add(**buffer[begin])
             if begin == end:
-                return ret
+                return diposed_count
             begin = (begin + 1) % len(buffer)
 
     def add(
@@ -693,7 +695,8 @@ class CachedReplayBuffer(ReplayBuffer):
                 lens[i] = len(buf)
                 rews[i] = np.sum(buf.rew[:lens[i]])
                 start_indexs[i] = self.main_buf._index
-                self.main_buf.update(buf) #TODO this can be greatly improved. what if main_buf is so small(in test). Can we move data as a whole batch to save time?
+                if self.main_buf._maxsize > 0:
+                    self.main_buf.update(buf)
                 buf.reset()
         return lens, rews, start_indexs
 

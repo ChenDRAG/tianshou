@@ -167,7 +167,7 @@ class DDPGPolicy(BasePolicy):
     
     def learn(self, batch: Batch, **kwargs: Any) -> Dict[str, float]:
         # critic
-        critic_loss, td = self._mse_optimizer(
+        td, critic_loss = self._mse_optimizer(
             batch, self.critic, self.critic_optim)
         batch.weight = td  # prio-buffer
 

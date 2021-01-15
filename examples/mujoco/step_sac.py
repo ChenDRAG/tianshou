@@ -119,18 +119,20 @@ def test_sac(args=get_args()):
 
     # collector
     cb = CachedReplayBuffer(size = args.buffer_size, cached_buf_n = args.training_num, max_length = 1000)
-    cb_test = CachedReplayBuffer(size = args.buffer_size, cached_buf_n = args.test_num, max_length = 1000)#TODO this is not necessary
+    cb_test = CachedReplayBuffer(size = 0, cached_buf_n = args.test_num, max_length = 1000)
     train_collector = BasicCollector(
         policy, train_envs, cb, preprocess_fn = preprocess_fn, training=True)
-    test_collector = BasicCollector(policy, test_envs, cb_test)#TODO test method write
+    test_collector = BasicCollector(policy, test_envs, cb_test)
     train_collector.collect(n_step=args.start_timesteps, random=True)
     # log
     log_path = os.path.join(args.logdir, args.task, 'sac', 'seed_' + str(
         args.seed) + '_' + datetime.datetime.now().strftime('%m%d-%H%M%S'))
+    save_path = os.path.join(log_path, "policy.pth")
     writer = SummaryWriter(log_path)
     logger = DefaultStepLogger(writer,
         log_train_interval = args.log_tinterval,
-        log_update_interval = args.log_uinterval)
+        log_update_interval = args.log_uinterval,
+        save_path = save_path)
 
     # trainer
     result = offpolicy_trainer_basic(

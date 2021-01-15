@@ -57,7 +57,7 @@ class LazyLogger:
         pass
 
 class DefaultStepLogger:
-    def __init__(self, writer, log_train_interval = 1, log_update_interval = 1000):
+    def __init__(self, writer, log_train_interval = 1, log_update_interval = 1000, save_path = None):
         self.writer = writer
         self.n_trainlog = 0
         self.n_testlog = 0
@@ -66,6 +66,7 @@ class DefaultStepLogger:
         self.log_update_interval = log_update_interval
         self.log_train_count = 0
         self.log_update_count = 0
+        self.save_path = save_path
         
     def write(self, key, x, y):
         self.writer.add_scalar(key, y, global_step=x)
@@ -106,15 +107,17 @@ class DefaultStepLogger:
                 self.write(k, gradient_step, v)
         self.log_update_count += 1
 
-    def global_log(self):
-        pass
+    def global_log(self, **kwargs):
+        if 'policy' in kwargs and self.save_path:
+            import torch
+            torch.save(kwargs['policy'].state_dict(), self.save_path)
 
 
 def convert_tfevents_to_csv(dir = './', suffix = 'sorted'):
     """recursively find all tfevent file under dir, and create
     a csv file compatible with openai baseline. This function assumes that 
     there is at most one tfevents file in each directory and will add suffix
-    to that directory.
+    to that directory.#TODO this need to be optimized later
     you can use 
     rl_plotter --save --avg_group --shaded_std --filename=test_rew --smooth=10
     to create standard rl reward graph.
@@ -160,7 +163,7 @@ def convert_tfevents_to_csv(dir = './', suffix = 'sorted'):
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument('--dir', type=str, default='/home/huayu/git/tianshou/examples/mujoco/ddpgbenchmark/InvertedDoublePendulum-v2/ddpg')
-    parser.add_argument('--suffix', type=str, default='InvertedDoublePendulum-v2_ddpg')
+    parser.add_argument('--dir', type=str, default='/home/huayu/git/tianshou/examples/mujoco/sac_benchmark_log/Humanoid-v3/sac')
+    parser.add_argument('--suffix', type=str, default='Humanoid-v3_sac')
     args = parser.parse_args()
     convert_tfevents_to_csv(args.dir, args.suffix)

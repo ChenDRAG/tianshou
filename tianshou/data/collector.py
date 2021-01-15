@@ -254,7 +254,7 @@ class Collector(object):
             else:
                 if no_grad:
                     with torch.no_grad():  # faster than retain_grad version
-                        #self.data.obs will be used by agent to get result(mainly action)
+                        # self.data.obs will be used by agent to get result(mainly action)
                         result = self.policy(self.data, last_state)
                 else:
                     result = self.policy(self.data, last_state)
@@ -408,7 +408,6 @@ def _batch_set_item(
         source.__dict__[k][indices] = vt
 
 
-
 class BasicCollector:
     def __init__(
         self,
@@ -416,7 +415,7 @@ class BasicCollector:
         env: Union[gym.Env, BaseVectorEnv],
         buffer: Optional[CachedReplayBuffer] = None,
         preprocess_fn: Optional[Callable[..., Batch]] = None,
-        training = False,
+        training = False,#TODO training mode for ori collector
         reward_metric: Optional[Callable[[np.ndarray], float]] = None,
     ) -> None:
         super().__init__()
@@ -437,7 +436,7 @@ class BasicCollector:
     def _check_buffer(self):
         max_episode_steps = self.env._max_episode_steps[0]
         if self.buffer is None:
-            self.buffer = CachedReplayBuffer(size = 1,
+            self.buffer = CachedReplayBuffer(size = 0,
             cached_buf_n = self.env_num, max_length = max_episode_steps)
         else:
             assert isinstance(self.buffer, CachedReplayBuffer), \

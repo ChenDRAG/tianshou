@@ -98,7 +98,7 @@ def test_ddpg(args=get_args()):
     cb_test = CachedReplayBuffer(size = args.buffer_size, cached_buf_n = args.test_num, max_length = 1000)#TODO this is not necessary
     train_collector = BasicCollector(
         policy, train_envs, cb, preprocess_fn = preprocess_fn, training=True)
-    test_collector = BasicCollector(policy, test_envs, cb_test)#TODO test method write
+    test_collector = BasicCollector(policy, test_envs, cb_test)
     train_collector.collect(n_step=args.start_timesteps, random=True)
     # log
     log_path = os.path.join(args.logdir, args.task, 'ddpg', 'seed_' + str(
