@@ -91,9 +91,11 @@ class PGPolicy(BasePolicy):
     ) -> Dict[str, List[float]]:
         losses = []
         for _ in range(repeat):
+            #TODO how to solve truncted 
+            # split too slow
             for b in batch.split(batch_size, merge_last=True):
                 self.optim.zero_grad()
-                dist = self(b).dist
+                dist = self(b).dist#why not b.dist  
                 a = to_torch_as(b.act, dist.logits)
                 r = to_torch_as(b.returns, dist.logits)
                 log_prob = dist.log_prob(a).reshape(len(r), -1).transpose(0, 1)

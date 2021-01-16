@@ -165,6 +165,7 @@ class BasePolicy(ABC, nn.Module):
         """
         if buffer is None:
             return {}
+        # TODO in on policy algorithm, all the data is copied, which is slow and unnecessary
         batch, indice = buffer.sample(sample_size)
         self.updating = True
         batch = self.process_fn(batch, buffer, indice)
@@ -202,7 +203,6 @@ class BasePolicy(ABC, nn.Module):
         """
         rew = batch.rew
         v_s_ = np.zeros_like(rew) if v_s_ is None else to_numpy(v_s_.flatten())
-        assert False, "needed to be modified"
         returns = _episodic_return(v_s_, rew, batch.done, gamma, gae_lambda)
         if rew_norm and not np.isclose(returns.std(), 0.0, 1e-2):
             returns = (returns - returns.mean()) / returns.std()
@@ -249,6 +249,7 @@ class BasePolicy(ABC, nn.Module):
             torch.Tensor with shape (bsz, ).
         """
         rew = buffer.rew
+        #TODO this rew_norm will cause unstablity in training
         if rew_norm:
             bfr = rew[:min(len(buffer), 1000)]  # avoid large buffer
             mean, std = bfr.mean(), bfr.std()
@@ -268,8 +269,8 @@ class BasePolicy(ABC, nn.Module):
         target_q = to_numpy(target_q_torch)
         done = np.zeros(buffer.done.shape, dtype=np.bool)
         #done != buffer.done because of possible unfinished episodes
-
         done[buffer.ends()] = True
+
         target_q = _nstep_return(rew, done, target_q, indices,
                                  gamma, n_step, len(buffer), mean, std)
 
@@ -283,7 +284,7 @@ class BasePolicy(ABC, nn.Module):
         f32 = np.array([0, 1], dtype=np.float32)
         b = np.array([False, True], dtype=np.bool_)
         i64 = np.array([[0, 1]], dtype=np.int64)
-        _episodic_return(f64, f64, b, 0.1, 0.1)#TODO
+        _episodic_return(f64, f64, b, 0.1, 0.1)
         _episodic_return(f32, f64, b, 0.1, 0.1)
         _nstep_return(f64, b, f32, i64, 0.1, 1, 4, 1.0, 0.0)
 
