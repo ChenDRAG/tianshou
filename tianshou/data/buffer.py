@@ -71,7 +71,7 @@ class ReplayBuffer:
     issue#38):
     ::
 
-        >>> buf = ReplayBuffer(size=9, stack_num=4, ignore_obs_next=True)  something wrong here
+        >>> buf = ReplayBuffer(size=9, stack_num=4, ignore_obs_next=True)
         >>> for i in range(16):
         ...     done = i % 5 == 0
         ...     buf.add(obs={'id': i}, act=i, rew=i, done=done,
@@ -159,7 +159,6 @@ class ReplayBuffer:
 
     def __getattr__(self, key: str) -> Any:
         """Return self.key."""
-        #TODO set attr protect keyworda
         try:
             return self._meta[key]
         except KeyError as e:
@@ -186,14 +185,13 @@ class ReplayBuffer:
             self._meta.__dict__[name] = _create_value(inst, self._maxsize)
             value = self._meta.__dict__[name]
 
-        #TODO should we at first do all the initial so that later we don't have to check
-        #TODO is this necessary??
-        if isinstance(inst, np.ndarray):
-            if inst.shape != value.shape[1:]:
-                raise ValueError(
-                    "Cannot add data to a buffer that has different shape with key"
-                    f" {name}, expect {value.shape[1:]}, given {inst.shape}."
-                )
+        #TODO can we at first do all the initial so that later we don't have to check
+        #TODO is this necessary, not adding this check will raise behind
+        if isinstance(inst, (torch.Tensor, np.ndarray)) and inst.shape != value.shape[1:]:
+            raise ValueError(
+                "Cannot add data to a buffer that has different shape with key"
+                f" {name}, expect {value.shape[1:]}, given {inst.shape}."
+            )
         try:
             value[self._index] = inst
         except KeyError: #assume this is batch now
@@ -203,7 +201,7 @@ class ReplayBuffer:
 
     @property
     def stack_num(self) -> int:
-        return self._stack  #TODO
+        return self._stack
 
     @stack_num.setter
     def stack_num(self, num: int) -> None:
@@ -374,7 +372,7 @@ class ReplayBuffer:
             info=self.get(index, "info"),
             policy=self.get(index, "policy"),
         )
-    
+
     def set_batch(self, batch: "Batch"):
         """Manually choose the batch you want the ReplayBuffer to manage. This 
         method should be called instantly after the ReplayBuffer is initialised.
@@ -577,9 +575,9 @@ class CachedReplayBuffer(ReplayBuffer):
     """
     def __init__(
         self,
-        size: int,
-        cached_buf_n: int,
-        max_length: int,
+        size: int,10
+        cached_buf_n: int,2
+        max_length: int,2
         **kwargs: Any,
     ) -> None:
         """

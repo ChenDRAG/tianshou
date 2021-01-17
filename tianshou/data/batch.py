@@ -123,6 +123,12 @@ def _create_value(
         return np.array([None for _ in range(size)])
 
 
+def _assert_type_keys(keys: Iterable[str]) -> None:
+    assert all(
+        isinstance(e, str) for e in keys
+    ), f"keys should all be string, but got {keys}"
+
+
 def _parse_value(v: Any) -> Optional[Union["Batch", np.ndarray, torch.Tensor]]:
     if isinstance(v, Batch):  # most often case
         return v
@@ -179,6 +185,7 @@ class Batch:
             batch_dict = deepcopy(batch_dict)
         if batch_dict is not None:
             if isinstance(batch_dict, (dict, Batch)):
+                _assert_type_keys(batch_dict.keys())
                 for k, v in batch_dict.items():
                     self.__dict__[k] = _parse_value(v)
             elif _is_batch_set(batch_dict):
@@ -712,9 +719,7 @@ class Batch:
     def split(
         self, size: int, shuffle: bool = True, merge_last: bool = False
     ) -> Iterator["Batch"]:
-        """Split whole data into multiple small batches. For now split method 
-        create a copy rather than reference of data because it might require 
-        shuffling.
+        """Split whole data into multiple small batches. 
 
         :param int size: divide the data batch with the given size, but one
             batch if the length of the batch is smaller than "size".
@@ -723,6 +728,8 @@ class Batch:
         :param bool merge_last: merge the last batch into the previous one.
             Default to False.
         """
+        # For now split method create a copy rather than reference of data
+        #  because it might require shuffling, which might be slow.
         length = len(self)
         assert 1 <= size  # size can be greater than length, return whole batch
         if shuffle:

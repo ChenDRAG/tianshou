@@ -98,7 +98,8 @@ class Collector(object):
         # with asynchronous simulation
         self.is_async = env.is_async
         # need cache buffers before storing in the main buffer
-        self._cached_buf = [ListReplayBuffer() for _ in range(self.env_num)]#TODO list buffer should be incredibly slow??
+        # TODO list buffer should be incredibly slow??
+        self._cached_buf = [ListReplayBuffer() for _ in range(self.env_num)]
         self.buffer = buffer
         self.policy = policy
         self.preprocess_fn = preprocess_fn
@@ -148,13 +149,14 @@ class Collector(object):
 
     def reset_env(self) -> None:
         """Reset all of the environment(s)' states and the cache buffers."""
-        #should not be exposed
+        # should not be exposed
         self._ready_env_ids = np.arange(self.env_num)
         obs = self.env.reset()
         if self.preprocess_fn:
             obs = self.preprocess_fn(obs=obs).get("obs", obs)
         self.data.obs = obs
-        for b in self._cached_buf: #TODO why do this?
+        # cached_buf is tight with envs, so we also have to reset cached_buf
+        for b in self._cached_buf:
             b.reset()
 
     def _reset_state(self, id: Union[int, List[int]]) -> None:
@@ -326,7 +328,6 @@ class Collector(object):
                     self._reset_state(j)
             # now we copy obs_next to obs, but since there might be finished episodes,
             # we have to reset finished envs first.
-            # TODO might auto reset help?
             obs_next = self.data.obs_next
             if sum(done):
                 env_ind_local = np.where(done)[0]
