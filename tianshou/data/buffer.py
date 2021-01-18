@@ -575,9 +575,9 @@ class CachedReplayBuffer(ReplayBuffer):
     """
     def __init__(
         self,
-        size: int,10
-        cached_buf_n: int,2
-        max_length: int,2
+        size: int,
+        cached_buf_n: int,
+        max_length: int,
         **kwargs: Any,
     ) -> None:
         """
