@@ -571,7 +571,7 @@ class BasicCollector:
             if not (isinstance(state, Batch) and state.is_empty()):
                 # save hidden state to policy._state, in order to save into buffer
                 policy._state = state
-            if self.training and not random:
+            if self.training and not random and hasattr(self.policy, 'add_exp_noise'):
                 act = self.policy.add_exp_noise(act)
             self.data.update(state=state, policy = policy, act = act)
 

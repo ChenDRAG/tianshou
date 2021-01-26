@@ -3,7 +3,7 @@ import numpy as np
 from typing import Any, Dict, List, Union, Optional, Callable
 
 from tianshou.policy import BasePolicy
-from tianshou.data import Batch, ReplayBuffer, to_torch_as
+from tianshou.data import Batch, ReplayBuffer, to_torch_as, to_numpy
 
 
 class PGPolicy(BasePolicy):
@@ -29,6 +29,8 @@ class PGPolicy(BasePolicy):
         dist_fn: Callable[[], torch.distributions.Distribution],
         discount_factor: float = 0.99,
         reward_normalization: bool = False,
+        approximater = None,
+        approximater_optim = None,
         **kwargs: Any,
     ) -> None:
         super().__init__(**kwargs)
@@ -41,6 +43,8 @@ class PGPolicy(BasePolicy):
         ), "discount factor should be in [0, 1]"
         self._gamma = discount_factor
         self._rew_norm = reward_normalization
+        self.approximater = approximater
+        self.approximater_optim = approximater_optim
 
     def process_fn(
         self, batch: Batch, buffer: ReplayBuffer, indice: np.ndarray
@@ -53,10 +57,21 @@ class PGPolicy(BasePolicy):
         where :math:`T` is the terminal time step, :math:`\gamma` is the
         discount factor, :math:`\gamma \in [0, 1]`.
         """
+        #TODO why not put this in learn?
         # batch.returns = self._vanilla_returns(batch)
         # batch.returns = self._vectorized_returns(batch)
-        return self.compute_episodic_return(
-            batch, gamma=self._gamma, gae_lambda=1.0, rew_norm=self._rew_norm)
+
+        # GAE, including TD(0) and baselined reward to go
+        # TODO sort trunctrated
+        # return self.compute_episodic_return(
+        #     batch, gamma=self._gamma, gae_lambda=1.0, rew_norm=self._rew_norm)
+        with torch.no_grad():
+            v_s = to_numpy(self.approximater(batch.obs))
+            v_s_ = to_numpy(self.approximater(batch.obs_next))
+        return self.compute_episodic_return_basic(batch, v_s, v_s_, gamma=self._gamma, gae_lambda=0.97, rew_norm=self._rew_norm)
+
+        # TODO add reward to go method, all reward, baseline method, Q/A function
+
 
     def forward(
         self,
@@ -83,6 +98,8 @@ class PGPolicy(BasePolicy):
             dist = self.dist_fn(*logits)
         else:
             dist = self.dist_fn(logits)  # type: ignore
+        # TODO might be rsample
+        # action not bounded now
         act = dist.sample()
         return Batch(logits=logits, act=act, state=h, dist=dist)
 
@@ -95,15 +112,47 @@ class PGPolicy(BasePolicy):
             # split too slow
             for b in batch.split(batch_size, merge_last=True):
                 self.optim.zero_grad()
-                dist = self(b).dist#why not b.dist  
-                a = to_torch_as(b.act, dist.logits)
-                r = to_torch_as(b.returns, dist.logits)
+                b_ = self(b)
+                dist = b_.dist #why not b.dist  because no gradient, but they should be same
+                # original use
+                a = to_torch_as(b.act, b_.logits)
+                r = to_torch_as(b.returns, b_.logits)
                 log_prob = dist.log_prob(a).reshape(len(r), -1).transpose(0, 1)
                 loss = -(log_prob * r).mean()
                 loss.backward()
                 self.optim.step()
                 losses.append(loss.item())
-        return {"loss": losses}
+  
+        def v_fn(batch):
+            if batch.info['TimeLimit.truncated'] == False:
+                return 0
+            else:
+                return to_numpy(self.approximater(
+                    np.expand_dims(batch.obs, 0)))
+        
+        train_v_iters = 80
+        for _ in range(repeat * train_v_iters):
+            with torch.no_grad():
+                batch = self._rew_to_go(batch, v_fn)
+            self.approximater_optim.zero_grad()
+            v = self.approximater(batch.obs).flatten() 
+            loss2 = ((to_torch_as(batch.target_v, v)- v)**2).mean()
+            loss2.backward()
+            self.approximater_optim.step()
+        print(loss2)
+        return {"loss": losses, "loss2": loss2}
+
+    def _rew_to_go(self, batch, v_fn):
+        returns = batch.rew.copy()
+        last = 0
+        for i in range(len(returns) - 1, -1, -1):
+            if not batch.done[i]:
+                returns[i] += self._gamma * last
+            else:
+                returns[i] += v_fn(batch[i])
+            last = returns[i]
+        batch.target_v = returns
+        return batch
 
     # def _vanilla_returns(self, batch):
     #     returns = batch.rew[:]

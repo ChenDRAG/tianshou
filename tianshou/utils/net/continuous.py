@@ -129,6 +129,7 @@ class ActorProb(nn.Module):
         else:
             shape = [1] * len(mu.shape)
             shape[1] = -1
+            # something wrong here un_c_sigma can only be 0
             sigma = (self.sigma.view(shape) + torch.zeros_like(mu)).exp()
         return (mu, sigma), state
 

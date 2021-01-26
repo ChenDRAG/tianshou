@@ -190,7 +190,7 @@ class BasePolicy(ABC, nn.Module):
             chronologically.TODO generalize
         :type batch: :class:`~tianshou.data.Batch`
         :param v_s_: the value function of all next states :math:`V(s')`.
-        :type v_s_: numpy.ndarray
+        :type v_s_: numpy.ndarray #TODO n+1 value shape
         :param float gamma: the discount factor, should be in [0, 1], defaults
             to 0.99.
         :param float gae_lambda: the parameter for Generalized Advantage
@@ -204,6 +204,32 @@ class BasePolicy(ABC, nn.Module):
         rew = batch.rew
         v_s_ = np.zeros_like(rew) if v_s_ is None else to_numpy(v_s_.flatten())
         returns = _episodic_return(v_s_, rew, batch.done, gamma, gae_lambda)
+        if rew_norm and not np.isclose(returns.std(), 0.0, 1e-2):
+            returns = (returns - returns.mean()) / returns.std()
+        batch.returns = returns
+        return batch
+
+    @staticmethod
+    def compute_episodic_return_basic(
+        batch: Batch,
+        v_s: Optional[Union[np.ndarray, torch.Tensor]] = None,
+        v_s_: Optional[Union[np.ndarray, torch.Tensor]] = None,
+        gamma: float = 0.99,
+        gae_lambda: float = 0.95,
+        rew_norm: bool = False,
+    ) -> Batch:
+        rew = batch.rew
+        if v_s is None:
+            assert np.isclose(gae_lambda, 1.0)
+        v_s = np.zeros_like(rew) if v_s is None else to_numpy(v_s.flatten())
+        v_s_ = np.zeros_like(rew) if v_s_ is None else to_numpy(v_s_.flatten())
+        # TODO neater
+        done = batch.done
+        # TODO assume batch is in whole episode now (no unfinished steps)
+        # done = np.zeros(batch.done.shape, dtype=np.bool)
+        # done != buffer.done because of possible unfinished episodes
+        # done[buffer.ends()] = True
+        returns = _gae_return(v_s, v_s_, rew, done, gamma, gae_lambda)
         if rew_norm and not np.isclose(returns.std(), 0.0, 1e-2):
             returns = (returns - returns.mean()) / returns.std()
         batch.returns = returns
@@ -267,10 +293,12 @@ class BasePolicy(ABC, nn.Module):
         terminal = indices[-1]
         target_q_torch = target_q_fn(buffer, terminal).flatten()  # (bsz, )
         target_q = to_numpy(target_q_torch)
+        # TODO this need to copy as ends behavior changed
         done = np.zeros(buffer.done.shape, dtype=np.bool)
         #done != buffer.done because of possible unfinished episodes
         done[buffer.ends()] = True
-
+        # treat unfinished episodes as done
+        #TODO remove len(buffer)
         target_q = _nstep_return(rew, done, target_q, indices,
                                  gamma, n_step, len(buffer), mean, std)
 
@@ -288,6 +316,23 @@ class BasePolicy(ABC, nn.Module):
         _episodic_return(f32, f64, b, 0.1, 0.1)
         _nstep_return(f64, b, f32, i64, 0.1, 1, 4, 1.0, 0.0)
 
+@njit
+def _gae_return(
+    v_s: np.ndarray,
+    v_s_: np.ndarray,
+    rew: np.ndarray,
+    done: np.ndarray,
+    gamma: float,
+    gae_lambda: float,
+) -> np.ndarray:
+    returns = np.zeros(rew.shape)
+    delta = rew + v_s_ * gamma - v_s
+    m = (1.0 - done) * (gamma * gae_lambda)
+    gae = 0.0
+    for i in range(len(rew) - 1, -1, -1):
+        gae = delta[i] + m[i] * gae
+        returns[i] = gae
+    return returns
 
 @njit
 def _episodic_return(

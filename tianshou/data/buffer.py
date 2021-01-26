@@ -718,7 +718,10 @@ class CachedReplayBuffer(ReplayBuffer):
             _all[start:end] =  _all[start:end] + add
             start = end
             add = add + buf._maxsize - len(buf)
-        indice = np.random.choice(_all, batch_size)
+        if batch_size == 0:
+            indice = _all
+        else:
+            indice = np.random.choice(_all, batch_size)
         assert len(indice) > 0, "No available indice can be sampled."
         return self[indice], indice
 

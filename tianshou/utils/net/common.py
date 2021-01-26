@@ -16,7 +16,7 @@ def miniblock(
     ret: List[nn.modules.Module] = [nn.Linear(inp, oup)]
     if norm_layer is not None:
         ret += [norm_layer(oup)]
-    ret += [activation(inplace=True)]
+    ret += [activation()]
     return ret
 
 class MLP(nn.Module):
@@ -58,7 +58,7 @@ class MLP(nn.Module):
                 kwargs["activation"] = activation[i]
             model += miniblock(
                             layer_size[i], layer_size[i+1], **kwargs)
-        self.model = nn.Sequential(*model)
+        self.model = nn.Sequential(*model).to(self.device)
 
     def forward(self, inp):
         inp = to_torch(inp, device=self.device, dtype=torch.float32)
@@ -92,6 +92,7 @@ class Net(nn.Module):
         hidden_layer_size: Union[list, int] = 128,
         dueling: Optional[Tuple[int, int]] = None,
         norm_layer: Optional[Callable[[int], nn.modules.Module]] = None,
+        activation = None,
     ) -> None:
         super().__init__()
         self.device = device
@@ -105,11 +106,11 @@ class Net(nn.Module):
         if isinstance(hidden_layer_size, int):
             #TODO originally if layer_num is 0 then there is actually one layer(inp*hidden), this is not clear, though
             hidden_layer_size = [hidden_layer_size]*(layer_num+1)
-        self.model = MLP(hidden_layer_size, norm_layer, inp_shape = input_size, device = device)
+        self.model = MLP(hidden_layer_size, norm_layer, inp_shape = input_size, device = device, activation=activation)
 
         if dueling is None:
             if action_shape and not concat:#This is not easy to read TODO
-                self.model = nn.Sequential(self.model, nn.Linear(hidden_layer_size, np.prod(action_shape)))
+                self.model = nn.Sequential(self.model, nn.Linear(hidden_layer_size[-1], np.prod(action_shape)))
         else:  # dueling DQN
             #TODO dueling use MLP
             q_layer_num, v_layer_num = dueling
