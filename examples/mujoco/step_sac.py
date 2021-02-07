@@ -130,8 +130,8 @@ def test_sac(args=get_args()):
     save_path = os.path.join(log_path, "policy.pth")
     writer = SummaryWriter(log_path)
     logger = DefaultStepLogger(writer,
-        log_train_interval = args.log_tinterval,
-        log_update_interval = args.log_uinterval,
+        env_step_interval = args.log_tinterval,
+        gradient_step_interval = args.log_uinterval,
         save_path = save_path)
 
     # trainer

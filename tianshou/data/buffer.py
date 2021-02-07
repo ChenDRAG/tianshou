@@ -761,10 +761,12 @@ class CachedReplayBuffer(ReplayBuffer):
             start = end
     
     def ends(self):
+        assert len(self.cached_bufs) == 1
         return np.concatenate(
-            [self.main_buf.ends(), *[b.ends() for b in self.cached_bufs]])
+            [self.main_buf.ends(), self.cached_bufs[0].ends() + self.main_buf._maxsize])
 
     def starts(self):
+        assert False
         return np.concatenate(
             [self.main_buf.starts(), *[b.starts() for b in self.cached_bufs]])
 

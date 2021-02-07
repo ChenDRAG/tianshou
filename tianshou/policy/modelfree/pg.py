@@ -66,12 +66,30 @@ class PGPolicy(BasePolicy):
         # return self.compute_episodic_return(
         #     batch, gamma=self._gamma, gae_lambda=1.0, rew_norm=self._rew_norm)
         with torch.no_grad():
-            v_s = to_numpy(self.approximater(batch.obs))
-            v_s_ = to_numpy(self.approximater(batch.obs_next))
-        return self.compute_episodic_return_basic(batch, v_s, v_s_, gamma=self._gamma, gae_lambda=0.97, rew_norm=self._rew_norm)
-
+            v_s = to_numpy(self.approximater(batch.obs)).flatten()
+            v_s_ = to_numpy(self.approximater(batch.obs_next)).flatten()
+        self._rm_done = True
+        mask = (~batch.done)
+        if self._rm_done:
+            mask = mask|(batch.info['TimeLimit.truncated'])
+        v_s_ = v_s_*mask
+        done = batch.done.copy()
+        done[np.isin(indice, buffer.ends())] = True
+        batch = self.compute_episodic_return_basic(batch, buffer, indice, v_s, v_s_, gamma=self._gamma, gae_lambda=0.97, rew_norm=self._rew_norm)
+        return self._rew_to_go(batch, v_s_, done)
         # TODO add reward to go method, all reward, baseline method, Q/A function
 
+    def _rew_to_go(self, batch, v_s_, done):
+        returns = batch.rew.copy()
+        last = 0
+        for i in range(len(returns) - 1, -1, -1):
+            if not done[i]:
+                returns[i] += self._gamma * last
+            else:
+                returns[i] += v_s_[i]
+            last = returns[i]
+        batch.target_v = returns
+        return batch
 
     def forward(
         self,
@@ -123,17 +141,9 @@ class PGPolicy(BasePolicy):
                 self.optim.step()
                 losses.append(loss.item())
   
-        def v_fn(batch):
-            if batch.info['TimeLimit.truncated'] == False:
-                return 0
-            else:
-                return to_numpy(self.approximater(
-                    np.expand_dims(batch.obs, 0)))
         
         train_v_iters = 80
         for _ in range(repeat * train_v_iters):
-            with torch.no_grad():
-                batch = self._rew_to_go(batch, v_fn)
             self.approximater_optim.zero_grad()
             v = self.approximater(batch.obs).flatten() 
             loss2 = ((to_torch_as(batch.target_v, v)- v)**2).mean()
@@ -142,17 +152,6 @@ class PGPolicy(BasePolicy):
         print(loss2)
         return {"loss": losses, "loss2": loss2}
 
-    def _rew_to_go(self, batch, v_fn):
-        returns = batch.rew.copy()
-        last = 0
-        for i in range(len(returns) - 1, -1, -1):
-            if not batch.done[i]:
-                returns[i] += self._gamma * last
-            else:
-                returns[i] += v_fn(batch[i])
-            last = returns[i]
-        batch.target_v = returns
-        return batch
 
     # def _vanilla_returns(self, batch):
     #     returns = batch.rew[:]

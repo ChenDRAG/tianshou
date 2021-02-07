@@ -212,6 +212,8 @@ class BasePolicy(ABC, nn.Module):
     @staticmethod
     def compute_episodic_return_basic(
         batch: Batch,
+        buffer: ReplayBuffer,
+        indice: np.ndarray,
         v_s: Optional[Union[np.ndarray, torch.Tensor]] = None,
         v_s_: Optional[Union[np.ndarray, torch.Tensor]] = None,
         gamma: float = 0.99,
@@ -221,14 +223,14 @@ class BasePolicy(ABC, nn.Module):
         rew = batch.rew
         if v_s is None:
             assert np.isclose(gae_lambda, 1.0)
-        v_s = np.zeros_like(rew) if v_s is None else to_numpy(v_s.flatten())
-        v_s_ = np.zeros_like(rew) if v_s_ is None else to_numpy(v_s_.flatten())
+        v_s = np.zeros_like(rew) if v_s is None else to_numpy(v_s)
+        v_s_ = np.zeros_like(rew) if v_s_ is None else to_numpy(v_s_)
         # TODO neater
-        done = batch.done
+        done = batch.done.copy()
+        done[np.isin(indice, buffer.ends())] = True
         # TODO assume batch is in whole episode now (no unfinished steps)
         # done = np.zeros(batch.done.shape, dtype=np.bool)
         # done != buffer.done because of possible unfinished episodes
-        # done[buffer.ends()] = True
         returns = _gae_return(v_s, v_s_, rew, done, gamma, gae_lambda)
         if rew_norm and not np.isclose(returns.std(), 0.0, 1e-2):
             returns = (returns - returns.mean()) / returns.std()

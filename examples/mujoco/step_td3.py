@@ -133,8 +133,8 @@ def test_td3(args=get_args()):
         args.seed) + '_' + datetime.datetime.now().strftime('%m%d-%H%M%S'))
     writer = SummaryWriter(log_path)
     logger = DefaultStepLogger(writer,
-        log_train_interval = args.log_tinterval,
-        log_update_interval = args.log_uinterval)
+        env_step_interval = args.log_tinterval,
+        gradient_step_interval = args.log_uinterval)
 
     # trainer
     result = offpolicy_trainer_basic(

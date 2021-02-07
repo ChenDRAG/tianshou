@@ -159,7 +159,7 @@ def onpolicy_trainer_basic(
     test_collector: Collector,
     max_epoch: int,
     step_per_epoch: int,
-    collect_per_step: int,
+    step_per_collect: int,
     repeat_per_collect: int,
     episode_per_test: Union[int, List[int]],
     batch_size: int,
@@ -170,6 +170,7 @@ def onpolicy_trainer_basic(
     logger = LazyLogger(),
     verbose: bool = True,
     test_in_train: bool = True,
+    collect_method = "step",
 ) -> Dict[str, Union[float, str]]:
     env_step, gradient_step = 0, 0
     best_epoch, best_reward, best_reward_std = -1, -1.0, 0.0
@@ -190,8 +191,9 @@ def onpolicy_trainer_basic(
             while t.n < t.total:
                 if train_fn:
                     train_fn(epoch, env_step)
-                result = train_collector.collect(n_episode=collect_per_step)
+                result = train_collector.collect(**{"n_" + collect_method : step_per_collect})
                 env_step += int(result["n/st"])
+                t.update(result["n/st"])
                 logger.log_traindata(result, env_step, gradient_step)
 
                 if test_in_train and stop_fn and stop_fn(result["rew"]):
@@ -222,7 +224,7 @@ def onpolicy_trainer_basic(
                 for k in losses.keys():
                     losses[k] = stat[k].get()
                 logger.log_updatedata(losses, env_step, gradient_step)
-                t.update(step)
+            # don't understand
             if t.n <= t.total:
                 t.update()
         # test
