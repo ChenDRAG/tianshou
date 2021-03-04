@@ -62,9 +62,14 @@ class PPOPolicy(PGPolicy):
         value_clip: bool = True,
         reward_normalization: bool = True,
         max_batchsize: int = 256,
+        max_repeat: int = 10,
+        target_kl: Optional[float] = None,
         **kwargs: Any,
     ) -> None:
+        # TODO lr, 3 optional, calculate kl.
         super().__init__(None, optim, dist_fn, discount_factor, **kwargs)
+        self.max_repeat = max_repeat
+        self.target_kl = target_kl
         self._max_grad_norm = max_grad_norm
         self._eps_clip = eps_clip
         self._weight_vf = vf_coef
@@ -84,30 +89,41 @@ class PPOPolicy(PGPolicy):
     def process_fn(
         self, batch: Batch, buffer: ReplayBuffer, indice: np.ndarray
     ) -> Batch:
-        if self._rew_norm:
-            mean, std = batch.rew.mean(), batch.rew.std()
-            if not np.isclose(std, 0.0, 1e-2):
-                batch.rew = (batch.rew - mean) / std
-        v, v_, old_log_prob = [], [], []
+        v_s, v_s_, old_log_prob = [], [], []
         with torch.no_grad():
+            #TODO too slow
             for b in batch.split(self._batch, shuffle=False, merge_last=True):
-                v_.append(self.critic(b.obs_next))
-                v.append(self.critic(b.obs))
-                old_log_prob.append(self(b).dist.log_prob(to_torch_as(b.act, v[0])))
-        v_ = to_numpy(torch.cat(v_, dim=0))
-        batch = self.compute_episodic_return(
-            batch, buffer, indice, v_, gamma=self._gamma,
+                v_s_.append(self.critic(b.obs_next))
+                v_s.append(self.critic(b.obs))
+                old_log_prob.append(self(b).dist.log_prob(to_torch_as(b.act, v_s[0])))
+        batch.v_s_ = torch.cat(v_s_, dim=0).flatten()
+        batch.v_s = torch.cat(v_s, dim=0).flatten()  # old value
+        v_s = to_numpy(batch.v_s)
+        v_s_ = to_numpy(batch.v_s_)
+        batch.adv = self.compute_gae_return(
+            batch, buffer, indice, v_s_, v_s, gamma=self._gamma,
             gae_lambda=self._lambda, rew_norm=self._rew_norm)
-        batch.v = torch.cat(v, dim=0).flatten()  # old value
-        batch.act = to_torch_as(batch.act, v[0])
+        # end_flag = batch.done.copy()
+        # end_flag[np.isin(indice, buffer.unfinished_index())] = True
+        # batch.returns = self._rew_to_go(batch, v_s_, end_flag)
+        batch.returns = batch.adv + v_s
+        batch.returns = to_torch_as(batch.returns, batch.v_s[0])
         batch.logp_old = torch.cat(old_log_prob, dim=0)
-        batch.returns = to_torch_as(batch.returns, v[0])
-        batch.adv = batch.returns - batch.v
-        if self._rew_norm:
-            mean, std = batch.adv.mean(), batch.adv.std()
-            if not np.isclose(std.item(), 0.0, 1e-2):
-                batch.adv = (batch.adv - mean) / std
+        batch.act = to_torch_as(batch.act, batch.v_s[0])
+        batch.adv = to_torch_as(batch.adv, batch.v_s[0])
         return batch
+
+    # def _rew_to_go(self, batch, v_s_, end_flag):
+    #     v_s_ = to_numpy(v_s_.flatten())
+    #     returns = batch.rew.copy()
+    #     last = 0
+    #     for i in range(len(returns) - 1, -1, -1):
+    #         if not end_flag[i]:
+    #             returns[i] += self._gamma * last
+    #         else:
+    #             returns[i] += v_s_[i]
+    #         last = returns[i]
+    #     return returns
 
     def forward(
         self,
@@ -143,11 +159,14 @@ class PPOPolicy(PGPolicy):
         self, batch: Batch, batch_size: int, repeat: int, **kwargs: Any
     ) -> Dict[str, List[float]]:
         losses, clip_losses, vf_losses, ent_losses = [], [], [], []
-        for _ in range(repeat):
+        # for _ in range(repeat):
+        for step in range(self.max_repeat):
+            approx_kls = []
+            # TODO shuffle
             for b in batch.split(batch_size, merge_last=True):
                 dist = self(b).dist
-                value = self.critic(b.obs).flatten()
-                ratio = (dist.log_prob(b.act) - b.logp_old).exp().float()
+                logp = dist.log_prob(b.act)
+                ratio = (logp - b.logp_old).exp().float()
                 ratio = ratio.reshape(ratio.size(0), -1).transpose(0, 1)
                 surr1 = ratio * b.adv
                 surr2 = ratio.clamp(1.0 - self._eps_clip, 1.0 + self._eps_clip) * b.adv
@@ -158,8 +177,10 @@ class PPOPolicy(PGPolicy):
                 else:
                     clip_loss = -torch.min(surr1, surr2).mean()
                 clip_losses.append(clip_loss.item())
+
+                value = self.critic(b.obs).flatten()
                 if self._value_clip:
-                    v_clip = b.v + (value - b.v).clamp(-self._eps_clip, self._eps_clip)
+                    v_clip = b.v_s + (value - b.v_s).clamp(-self._eps_clip, self._eps_clip)
                     vf1 = (b.returns - value).pow(2)
                     vf2 = (b.returns - v_clip).pow(2)
                     vf_loss = 0.5 * torch.max(vf1, vf2).mean()
@@ -175,9 +196,14 @@ class PPOPolicy(PGPolicy):
                 loss.backward()
                 if self._max_grad_norm:
                     nn.utils.clip_grad_norm_(
-                        list(self.actor.parameters()) + list(self.critic.parameters()),
-                        self._max_grad_norm)
+                        list(self.actor.parameters()) + list(self.critic.parameters()), self._max_grad_norm)
                 self.optim.step()
+                approx_kls.append(torch.mean(b.logp_old - logp).detach().cpu().numpy())
+            
+            if self.target_kl and np.mean(approx_kls) > 1.5 * self.target_kl:
+                print(f"Early stopping at step {step} due to reaching max kl: {np.mean(approx_kls):.3f}")
+                break
+
         return {
             "loss": losses,
             "loss/clip": clip_losses,

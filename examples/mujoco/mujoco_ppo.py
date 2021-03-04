@@ -1,0 +1,151 @@
+import free_mjc
+import os
+import gym
+import torch
+import datetime
+import argparse
+import numpy as np
+from torch import nn
+from torch.utils.tensorboard import SummaryWriter
+from torch.distributions import Independent, Normal
+
+from tianshou.policy import PPOPolicy
+from tianshou.utils import BasicLogger
+from tianshou.env import SubprocVectorEnv
+from tianshou.utils.net.common import Net
+from tianshou.trainer import onpolicy_trainer
+from tianshou.data import Collector, ReplayBuffer, VectorReplayBuffer
+from tianshou.utils.net.continuous import ActorProb, Critic
+
+#TODO linear lr
+
+def get_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--task', type=str, default='Ant-v3')
+    parser.add_argument('--seed', type=int, default=0)
+    parser.add_argument('--buffer-size', type=int, default=8000)
+    parser.add_argument('--hidden-sizes', type=int, nargs='*', default=[64, 64])
+    parser.add_argument('--lr', type=float, default=3e-4)
+    parser.add_argument('--gamma', type=float, default=0.99)
+    parser.add_argument('--epoch', type=int, default=100)
+    parser.add_argument('--step-per-epoch', type=int, default=30000)
+    parser.add_argument('--step-per-collect', type=int, default=4000)
+    parser.add_argument('--repeat-per-collect', type=int, default=1)
+    parser.add_argument('--batch-size', type=int, default=64)# 64 in baselines
+    parser.add_argument('--training-num', type=int, default=1)
+    parser.add_argument('--test-num', type=int, default=10)#ori 100
+    parser.add_argument('--logdir', type=str, default='log')
+    parser.add_argument('--render', type=float, default=0.)
+    parser.add_argument(
+        '--device', type=str,
+        default='cuda' if torch.cuda.is_available() else 'cpu')
+    parser.add_argument('--resume-path', type=str, default=None)
+    # ppo special
+    parser.add_argument('--vf-coef', type=float, default=0.5)
+    parser.add_argument('--ent-coef', type=float, default=0.0)
+    parser.add_argument('--eps-clip', type=float, default=0.2)
+    parser.add_argument('--max-grad-norm', type=float, default=0.5)#0.5 in sb3
+    parser.add_argument('--gae-lambda', type=float, default=0.95)# 0.95 in baselines 0.97 in spinning up
+    parser.add_argument('--rew-norm', type=int, default=True)
+    parser.add_argument('--dual-clip', type=float, default=None)
+    parser.add_argument('--value-clip', type=int, default=True)
+    parser.add_argument('--target-kl', type=int, default=0.01)
+    parser.add_argument('--max-repeat', type=int, default=10)#10 in baselines /sb3
+    return parser.parse_args()
+
+
+
+def test_ppo(args=get_args()):
+    torch.set_num_threads(1)  # TODO we just need only one thread for NN
+    env = gym.make(args.task)
+    args.state_shape = env.observation_space.shape or env.observation_space.n
+    args.action_shape = env.action_space.shape or env.action_space.n
+    args.max_action = env.action_space.high[0]
+    print("Observations shape:", args.state_shape)
+    print("Actions shape:", args.action_shape)
+    print("Action range:", np.min(env.action_space.low),
+          np.max(env.action_space.high))
+    # train_envs = gym.make(args.task)
+    train_envs = SubprocVectorEnv(
+        [lambda: gym.make(args.task) for _ in range(args.training_num)])
+    # test_envs = gym.make(args.task)
+    test_envs = SubprocVectorEnv(
+        [lambda: gym.make(args.task) for _ in range(args.test_num)])
+    # seed
+    np.random.seed(args.seed)
+    torch.manual_seed(args.seed)
+    train_envs.seed(args.seed)
+    test_envs.seed(args.seed)
+    # model
+    net_a = Net(args.state_shape, hidden_sizes=args.hidden_sizes, activation=nn.Tanh, device=args.device)
+    actor = ActorProb(net_a, args.action_shape, max_action=args.max_action, unbounded=True,
+                      device=args.device)
+    # TODO check unbounded and -0.5
+    actor.sigma_param = nn.Parameter(torch.as_tensor(-0.5 * np.ones((actor.output_dim, 1), dtype=np.float32)))
+    actor = actor.to(args.device)
+    net_c = Net(args.state_shape, hidden_sizes=args.hidden_sizes, activation=nn.Tanh, device=args.device)
+    critic = Critic(net_c, device=args.device).to(args.device)
+
+    # orthogonal initialization TODO checkout
+    for m in list(actor.modules()) + list(critic.modules()):
+        if isinstance(m, torch.nn.Linear):
+            torch.nn.init.orthogonal_(m.weight)
+            torch.nn.init.zeros_(m.bias)
+    optim = torch.optim.Adam(set(
+        actor.parameters()).union(critic.parameters()), lr=args.lr)
+
+    # replace DiagGuassian with Independent(Normal) which is equivalent
+    # pass *logits to be consistent with policy.forward TODO
+    def dist(*logits):
+        return Independent(Normal(*logits), 1)
+
+    policy = PPOPolicy(
+        actor, critic, optim, dist, args.gamma,
+        max_grad_norm=args.max_grad_norm,
+        eps_clip=args.eps_clip,
+        vf_coef=args.vf_coef,
+        ent_coef=args.ent_coef,
+        reward_normalization=args.rew_norm,
+        max_repeat=args.max_repeat,
+        target_kl=args.target_kl,
+        # dual_clip=args.dual_clip,
+        # dual clip cause monotonically increasing log_std :)
+        value_clip=args.value_clip,
+        # action_range=[env.action_space.low[0], env.action_space.high[0]],)
+        # if clip the action, ppo would not converge :)
+        gae_lambda=args.gae_lambda)
+
+    # collector
+    if args.training_num > 1:
+        buffer = VectorReplayBuffer(args.buffer_size, len(train_envs))
+    else:
+        buffer = ReplayBuffer(args.buffer_size)
+    train_collector = Collector(policy, train_envs, buffer, exploration_noise=True)
+    test_collector = Collector(policy, test_envs)
+    # log
+    log_path = os.path.join(args.logdir, args.task, 'ppo', 'seed_' + str(
+        args.seed) + '_' + datetime.datetime.now().strftime('%m%d-%H%M%S'))
+    writer = SummaryWriter(log_path)
+    writer.add_text("args", str(args))
+    logger = BasicLogger(writer)
+
+    def save_fn(policy):
+        torch.save(policy.state_dict(), os.path.join(log_path, 'policy.pth'))
+
+    # trainer
+    result = onpolicy_trainer(
+        policy, train_collector, test_collector, args.epoch,
+        args.step_per_epoch, args.repeat_per_collect, args.test_num, args.batch_size,
+        step_per_collect=args.step_per_collect, save_fn=save_fn,
+        logger=logger, test_in_train=False)
+
+    # Let's watch its performance!
+    policy.eval()
+    test_envs.seed(args.seed)
+    test_collector.reset()
+    result = test_collector.collect(n_episode=args.test_num, render=args.render)
+    print(f'Final reward: {result["rews"].mean()}, length: {result["lens"].mean()}')
+
+
+if __name__ == '__main__':
+    test_ppo()

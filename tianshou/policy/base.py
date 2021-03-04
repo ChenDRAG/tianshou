@@ -211,11 +211,12 @@ class BasePolicy(ABC, nn.Module):
         return mask
 
     @staticmethod
-    def compute_episodic_return(
+    def compute_gae_return(
         batch: Batch,
         buffer: ReplayBuffer,
         indice: np.ndarray,
         v_s_: Optional[Union[np.ndarray, torch.Tensor]] = None,
+        v_s: Optional[Union[np.ndarray, torch.Tensor]] = None, 
         gamma: float = 0.99,
         gae_lambda: float = 0.95,
         rew_norm: bool = False,
@@ -223,7 +224,7 @@ class BasePolicy(ABC, nn.Module):
         """Compute returns over given batch.
 
         Use Implementation of Generalized Advantage Estimator (arXiv:1506.02438)
-        to calculate q function/reward to go of given batch.
+        to calculate A function/reward to go of given batch.
 
         :param Batch batch: a data batch which contains several episodes of data in
             sequential order. Mind that the end of each finished episode of batch
@@ -246,14 +247,17 @@ class BasePolicy(ABC, nn.Module):
             v_s_ = np.zeros_like(rew)
         else:
             v_s_ = to_numpy(v_s_.flatten()) * BasePolicy.value_mask(buffer, indice)
+        if v_s is None:
+            v_s = np.roll(v_s_, 1)
+        else:
+            v_s = to_numpy(v_s.flatten())
 
         end_flag = batch.done.copy()
         end_flag[np.isin(indice, buffer.unfinished_index())] = True
-        returns = _episodic_return(v_s_, rew, end_flag, gamma, gae_lambda)
+        returns = _gae_return(v_s, v_s_, rew, end_flag, gamma, gae_lambda)
         if rew_norm and not np.isclose(returns.std(), 0.0, 1e-2):
             returns = (returns - returns.mean()) / returns.std()
-        batch.returns = returns
-        return batch
+        return returns
 
     @staticmethod
     def compute_nstep_return(
