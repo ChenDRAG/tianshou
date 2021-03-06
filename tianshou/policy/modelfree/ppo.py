@@ -100,13 +100,12 @@ class PPOPolicy(PGPolicy):
         batch.v_s = torch.cat(v_s, dim=0).flatten()  # old value
         v_s = to_numpy(batch.v_s)
         v_s_ = to_numpy(batch.v_s_)
-        batch.adv = self.compute_gae_return(
+        batch.adv, batch.returns = self.compute_gae_return(
             batch, buffer, indice, v_s_, v_s, gamma=self._gamma,
             gae_lambda=self._lambda, rew_norm=self._rew_norm)
         # end_flag = batch.done.copy()
         # end_flag[np.isin(indice, buffer.unfinished_index())] = True
         # batch.returns = self._rew_to_go(batch, v_s_, end_flag)
-        batch.returns = batch.adv + v_s
         batch.returns = to_torch_as(batch.returns, batch.v_s[0])
         batch.logp_old = torch.cat(old_log_prob, dim=0)
         batch.act = to_torch_as(batch.act, batch.v_s[0])
@@ -158,6 +157,7 @@ class PPOPolicy(PGPolicy):
     def learn(  # type: ignore
         self, batch: Batch, batch_size: int, repeat: int, **kwargs: Any
     ) -> Dict[str, List[float]]:
+        self.change_lr(self.optim)
         losses, clip_losses, vf_losses, ent_losses = [], [], [], []
         # for _ in range(repeat):
         for step in range(self.max_repeat):

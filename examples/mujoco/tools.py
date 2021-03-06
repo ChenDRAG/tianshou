@@ -50,7 +50,7 @@ def convert_tfevents_to_csv(dir = './', suffix = 'sorted'):
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument('--dir', type=str, default='/home/huayu/git/tianshou/examples/mujoco/ppo_official3/Ant-v3/ppo')
-    parser.add_argument('--suffix', type=str, default='Ant-v3_ppo_official3')
+    parser.add_argument('--dir', type=str, default='/home/huayu/git/tianshou/examples/mujoco/ppo_official_norm/HalfCheetah-v3/ppo')
+    parser.add_argument('--suffix', type=str, default='HalfCheetah-v3_ppo_official_norm')
     args = parser.parse_args()
     convert_tfevents_to_csv(args.dir, args.suffix)

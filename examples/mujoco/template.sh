@@ -9,7 +9,7 @@ if [ ! -d $TXTLOGDIR ]; then
 fi
 
 main() {
-    TASK_LIST=("Swimmer-v3")
+    TASK_LIST=("Walker2d-v3" "HalfCheetah-v3" "Ant-v3" "Hopper-v3" "Reacher-v2" "InvertedDoublePendulum-v2" "InvertedPendulum-v2" "Swimmer-v3" "Humanoid-v3")
     MAXSEED=10
     for TASK in ${TASK_LIST[*]}
     do
@@ -20,14 +20,13 @@ main() {
 
             CUDA_VISIBLE_DEVICES=$selected_gpu python mujoco_ppo.py \
             --task $TASK \
-            --training-num 4 \
             --hidden-sizes 64 64 \
             --target-kl 0 \
             --batch-size 64 \
             --seed $seed \
-            --logdir "ppobenchmarkt4" > $txtname 2>&1 &
+            --logdir "ppobenchmark" > $txtname 2>&1 &
             
-            sleep 6s
+            sleep 10s
         done
     done
     echo "ENDED!"
@@ -36,7 +35,7 @@ main() {
 function select_gpu(){
     MAX_NUM_PER_GPU=5
     MEMORY_THRESHOLD=70
-    USAGE_THRESHOLD=70
+    USAGE_THRESHOLD=80
     GPU_NUM=`nvidia-smi --query-gpu=count --format=csv,noheader,nounits -i 0`
     while true
     do

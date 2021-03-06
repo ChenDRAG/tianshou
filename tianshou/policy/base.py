@@ -241,7 +241,10 @@ class BasePolicy(ABC, nn.Module):
         :return: a Batch. The result will be stored in batch.returns as a numpy
             array with shape (bsz, ).
         """
-        rew = batch.rew
+        if rew_norm:
+            rew = batch.info.normalised_r
+        else:
+            rew = batch.rew
         if v_s_ is None:
             assert np.isclose(gae_lambda, 1.0)
             v_s_ = np.zeros_like(rew)
@@ -254,10 +257,12 @@ class BasePolicy(ABC, nn.Module):
 
         end_flag = batch.done.copy()
         end_flag[np.isin(indice, buffer.unfinished_index())] = True
-        returns = _gae_return(v_s, v_s_, rew, end_flag, gamma, gae_lambda)
-        if rew_norm and not np.isclose(returns.std(), 0.0, 1e-2):
-            returns = (returns - returns.mean()) / returns.std()
-        return returns
+        advantage = _gae_return(v_s, v_s_, rew, end_flag, gamma, gae_lambda)
+        returns = advantage + v_s
+        # TODO
+        if rew_norm and not np.isclose(advantage.std(), 0.0, 1e-2):
+            advantage = (advantage - advantage.mean()) / advantage.std()
+        return advantage, returns
 
     @staticmethod
     def compute_nstep_return(
