@@ -5,7 +5,40 @@ from typing import Any, Dict, List, Type, Tuple, Union, Optional
 
 from tianshou.policy import PGPolicy
 from tianshou.data import Batch, ReplayBuffer, to_numpy, to_torch_as
+class RunningMeanStd(object):
+    def __init__(self, epsilon: float = 1e-4, shape: Tuple[int, ...] = ()):
+        """
+        Calulates the running mean and std of a data stream
+        https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Parallel_algorithm
 
+        :param epsilon: helps with arithmetic issues
+        :param shape: the shape of the data stream's output
+        """
+        self.mean = np.zeros(shape, np.float64)
+        self.var = np.ones(shape, np.float64)
+        self.count = epsilon
+
+    def update(self, arr: np.ndarray) -> None:
+        batch_mean = np.mean(arr, axis=0)
+        batch_var = np.var(arr, axis=0)
+        batch_count = arr.shape[0]
+        self.update_from_moments(batch_mean, batch_var, batch_count)
+
+    def update_from_moments(self, batch_mean: np.ndarray, batch_var: np.ndarray, batch_count: int) -> None:
+        delta = batch_mean - self.mean
+        tot_count = self.count + batch_count
+
+        new_mean = self.mean + delta * batch_count / tot_count
+        m_a = self.var * self.count
+        m_b = batch_var * batch_count
+        m_2 = m_a + m_b + np.square(delta) * self.count * batch_count / (self.count + batch_count)
+        new_var = m_2 / (self.count + batch_count)
+
+        new_count = batch_count + self.count
+
+        self.mean = new_mean
+        self.var = new_var
+        self.count = new_count
 
 class PPOPolicy(PGPolicy):
     r"""Implementation of Proximal Policy Optimization. arXiv:1707.06347.
@@ -68,6 +101,9 @@ class PPOPolicy(PGPolicy):
     ) -> None:
         # TODO lr, 3 optional, calculate kl.
         super().__init__(None, optim, dist_fn, discount_factor, **kwargs)
+        self.ret_rms = RunningMeanStd(shape=())
+        self.clip_reward = 10.0
+        self.epsilon = 1e-8
         self.max_repeat = max_repeat
         self.target_kl = target_kl
         self._max_grad_norm = max_grad_norm
@@ -98,11 +134,13 @@ class PPOPolicy(PGPolicy):
                 old_log_prob.append(self(b).dist.log_prob(to_torch_as(b.act, v_s[0])))
         batch.v_s_ = torch.cat(v_s_, dim=0).flatten()
         batch.v_s = torch.cat(v_s, dim=0).flatten()  # old value
-        v_s = to_numpy(batch.v_s)
-        v_s_ = to_numpy(batch.v_s_)
+        v_s = self.unnormalize_reward(to_numpy(batch.v_s).flatten())
+        v_s_ = self.unnormalize_reward(to_numpy(batch.v_s_).flatten())
         batch.adv, batch.returns = self.compute_gae_return(
             batch, buffer, indice, v_s_, v_s, gamma=self._gamma,
             gae_lambda=self._lambda, rew_norm=self._rew_norm)
+        self.ret_rms.update(batch.returns)
+        batch.returns = self.normalize_reward(batch.returns)
         # end_flag = batch.done.copy()
         # end_flag[np.isin(indice, buffer.unfinished_index())] = True
         # batch.returns = self._rew_to_go(batch, v_s_, end_flag)
@@ -210,3 +248,13 @@ class PPOPolicy(PGPolicy):
             "loss/vf": vf_losses,
             "loss/ent": ent_losses,
         }
+
+    def normalize_reward(self, reward: np.ndarray) -> np.ndarray:
+        """
+        Normalize rewards using this VecNormalize's rewards statistics.
+        Calling this method does not update statistics.
+        """
+        reward = np.clip(reward / np.sqrt(self.ret_rms.var + self.epsilon), -self.clip_reward, self.clip_reward)
+        return reward
+    def unnormalize_reward(self, reward: np.ndarray) -> np.ndarray:
+        return reward * np.sqrt(self.ret_rms.var + self.epsilon)

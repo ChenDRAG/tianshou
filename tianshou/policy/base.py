@@ -241,10 +241,11 @@ class BasePolicy(ABC, nn.Module):
         :return: a Batch. The result will be stored in batch.returns as a numpy
             array with shape (bsz, ).
         """
-        if rew_norm:
-            rew = batch.info.normalised_r
-        else:
-            rew = batch.rew
+        # if rew_norm:
+        #     rew = batch.info.normalised_r
+        # else:
+        #     rew = batch.rew
+        rew = batch.rew
         if v_s_ is None:
             assert np.isclose(gae_lambda, 1.0)
             v_s_ = np.zeros_like(rew)

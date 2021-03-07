@@ -73,16 +73,16 @@ class normalize_train(SubprocVectorEnv):
         # check TODO
         if training:
             self.obs_rms = RunningMeanStd(shape=self.observation_space[0].shape)
-            self.ret_rms = RunningMeanStd(shape=())
+            # self.ret_rms = RunningMeanStd(shape=())
         self.clip_obs = clip_obs
-        self.clip_reward = clip_reward
+        # self.clip_reward = clip_reward
         # Returns: discounted rewards
-        self.ret = np.zeros(self.env_num)
-        self.gamma = gamma
+        # self.ret = np.zeros(self.env_num)
+        # self.gamma = gamma
         self.epsilon = epsilon
         self.training = training
         self.norm_obs = norm_obs
-        self.norm_reward = norm_reward
+        # self.norm_reward = norm_reward
         self._buffer = np.arange(self.env_num)
 
     def step(
@@ -95,17 +95,17 @@ class normalize_train(SubprocVectorEnv):
         obs_next, rew, done, info = super().step(action, id)
         if self.training:
             self.obs_rms.update(obs_next)
-            self.ret[id] = self.ret[id] * self.gamma + rew
-            self.ret_rms.update(self.ret[id])
+            # self.ret[id] = self.ret[id] * self.gamma + rew
+            # self.ret_rms.update(self.ret[id])
         obs_next = self.normalize_obs(obs_next)
 
-        # why normalise reward is testing
-        if self.training:
-            normalised_rew = self.normalize_reward(deepcopy(rew))
-            for i, r in zip(info, normalised_rew):
-                i['normalised_r'] = r
+        # # when normalise reward is testing
+        # if self.training:
+        #     normalised_rew = self.normalize_reward(deepcopy(rew))
+        #     for i, r in zip(info, normalised_rew):
+        #         i['normalised_r'] = r
 
-        self.ret[id][done] = False
+        # self.ret[id][done] = False
         return obs_next, rew, done, info
 
     def reset(
@@ -114,20 +114,20 @@ class normalize_train(SubprocVectorEnv):
         if id is None:
             id = self._buffer
         obs = super().reset(id)
-        self.ret[id] = np.zeros(len(id))
+        # self.ret[id] = np.zeros(len(id))
         if self.training:
             self.obs_rms.update(obs)
             # self._update_reward(self.ret)
         return self.normalize_obs(obs)
 
-    def normalize_reward(self, reward: np.ndarray) -> np.ndarray:
-        """
-        Normalize rewards using this VecNormalize's rewards statistics.
-        Calling this method does not update statistics.
-        """
-        if self.norm_reward:
-            reward = np.clip(reward / np.sqrt(self.ret_rms.var + self.epsilon), -self.clip_reward, self.clip_reward)
-        return reward
+    # def normalize_reward(self, reward: np.ndarray) -> np.ndarray:
+    #     """
+    #     Normalize rewards using this VecNormalize's rewards statistics.
+    #     Calling this method does not update statistics.
+    #     """
+    #     if self.norm_reward:
+    #         reward = np.clip(reward / np.sqrt(self.ret_rms.var + self.epsilon), -self.clip_reward, self.clip_reward)
+    #     return reward
 
     def normalize_obs(self, obs: np.ndarray) -> np.ndarray:
         """
