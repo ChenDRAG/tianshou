@@ -1,4 +1,5 @@
-import free_mjc
+#!/usr/bin/env python3
+
 import os
 import gym
 import torch
@@ -13,8 +14,8 @@ from tianshou.env import SubprocVectorEnv
 from tianshou.utils.net.common import Net
 from tianshou.exploration import GaussianNoise
 from tianshou.trainer import offpolicy_trainer
-from tianshou.data import Collector, ReplayBuffer, VectorReplayBuffer
 from tianshou.utils.net.continuous import Actor, Critic
+from tianshou.data import Collector, ReplayBuffer, VectorReplayBuffer
 
 
 def get_args():
@@ -29,7 +30,7 @@ def get_args():
     parser.add_argument('--tau', type=float, default=0.005)
     parser.add_argument('--exploration-noise', type=float, default=0.1)
     parser.add_argument("--start-timesteps", type=int, default=25000)
-    parser.add_argument('--epoch', type=int, default=250)
+    parser.add_argument('--epoch', type=int, default=200)
     parser.add_argument('--step-per-epoch', type=int, default=5000)
     parser.add_argument('--step-per-collect', type=int, default=1)
     parser.add_argument('--update-per-step', type=int, default=1)
@@ -57,7 +58,7 @@ def test_ddpg(args=get_args()):
     print("Action range:", np.min(env.action_space.low),
           np.max(env.action_space.high))
     # train_envs = gym.make(args.task)
-    if args.training_num > 0:
+    if args.training_num > 1:
         train_envs = SubprocVectorEnv(
             [lambda: gym.make(args.task) for _ in range(args.training_num)])
     else:
@@ -95,7 +96,7 @@ def test_ddpg(args=get_args()):
         print("Loaded agent from: ", args.resume_path)
 
     # collector
-    if args.training_num > 0:
+    if args.training_num > 1:
         buffer = VectorReplayBuffer(args.buffer_size, len(train_envs))
     else:
         buffer = ReplayBuffer(args.buffer_size)

@@ -1,4 +1,5 @@
-import free_mjc
+#!/usr/bin/env python3
+
 import os
 import gym
 import torch
@@ -12,8 +13,8 @@ from tianshou.utils import BasicLogger
 from tianshou.env import SubprocVectorEnv
 from tianshou.utils.net.common import Net
 from tianshou.trainer import offpolicy_trainer
-from tianshou.data import Collector, ReplayBuffer, VectorReplayBuffer
 from tianshou.utils.net.continuous import ActorProb, Critic
+from tianshou.data import Collector, ReplayBuffer, VectorReplayBuffer
 
 
 def get_args():
@@ -30,7 +31,7 @@ def get_args():
     parser.add_argument('--auto-alpha', default=False, action='store_true')
     parser.add_argument('--alpha-lr', type=float, default=3e-4)
     parser.add_argument("--start-timesteps", type=int, default=10000)
-    parser.add_argument('--epoch', type=int, default=250)
+    parser.add_argument('--epoch', type=int, default=200)
     parser.add_argument('--step-per-epoch', type=int, default=5000)
     parser.add_argument('--step-per-collect', type=int, default=1)
     parser.add_argument('--update-per-step', type=int, default=1)
