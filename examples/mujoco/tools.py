@@ -6,7 +6,7 @@ def convert_tfevents_to_csv(dir = './', suffix = 'sorted'):
     there is at most one tfevents file in each directory and will add suffix
     to that directory.#TODO this need to be optimized later
     you can use 
-    rl_plotter --save --avg_group --shaded_std --filename=test_rew --smooth=10
+    rl_plotter --save --avg_group --shaded_std --filename=test_rew --smooth=0
     to create standard rl reward graph.
     for more detail, please refer to https://github.com/gxywy/rl-plotter
     """
@@ -50,7 +50,7 @@ def convert_tfevents_to_csv(dir = './', suffix = 'sorted'):
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument('--dir', type=str, default='/home/huayu/git/tianshou/examples/mujoco/ppo_official_norm/HalfCheetah-v3/ppo')
-    parser.add_argument('--suffix', type=str, default='HalfCheetah-v3_ppo_official_norm')
+    parser.add_argument('--dir', type=str, default='/home/huayu/git/tianshou/examples/mujoco/ppobenchmark_newnorm/Humanoid-v3/ppo')
+    parser.add_argument('--suffix', type=str, default='Humanoid-v3_ppo')
     args = parser.parse_args()
     convert_tfevents_to_csv(args.dir, args.suffix)
