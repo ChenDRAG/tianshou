@@ -3,13 +3,13 @@ echo "STARTED"
 counted=0
 selected_gpu=0
 
-TXTLOGDIR="./temp/"
+TXTLOGDIR="./temp0311/"
 if [ ! -d $TXTLOGDIR ]; then
   mkdir $TXTLOGDIR
 fi
 
 main() {
-    TASK_LIST=("Swimmer-v3")
+    TASK_LIST=("HalfCheetah-v3")
     MAXSEED=10
     for TASK in ${TASK_LIST[*]}
     do
@@ -18,16 +18,36 @@ main() {
             select_gpu
             txtname=${TXTLOGDIR}${TASK}_`date '+%m-%d-%H-%M-%S'`_seed_${seed}.txt
 
-            CUDA_VISIBLE_DEVICES=$selected_gpu python mujoco_ppo.py \
+            CUDA_VISIBLE_DEVICES=$selected_gpu python -u mujoco_ppo.py \
             --task $TASK \
-            --training-num 4 \
             --hidden-sizes 64 64 \
             --target-kl 0 \
+            --epoch 34 \
+            --value-clip 0 \
             --batch-size 64 \
             --seed $seed \
-            --logdir "ppobenchmarkt4" > $txtname 2>&1 &
+            --logdir "no_rew_norm_no_vclip" > $txtname 2>&1 &
             
-            sleep 6s
+            sleep 2s
+        done
+    done
+    for TASK in ${TASK_LIST[*]}
+    do
+        for ((seed=0;seed<$MAXSEED;seed+=1))
+        do
+            select_gpu
+            txtname=${TXTLOGDIR}${TASK}_`date '+%m-%d-%H-%M-%S'`_seed_${seed}.txt
+
+            CUDA_VISIBLE_DEVICES=$selected_gpu python -u mujoco_ppo.py \
+            --task $TASK \
+            --hidden-sizes 64 64 \
+            --target-kl 0 \
+            --epoch 34 \
+            --batch-size 64 \
+            --seed $seed \
+            --logdir "no_rew_norm_with_vclip" > $txtname 2>&1 &
+            
+            sleep 2s
         done
     done
     echo "ENDED!"
@@ -36,7 +56,7 @@ main() {
 function select_gpu(){
     MAX_NUM_PER_GPU=5
     MEMORY_THRESHOLD=70
-    USAGE_THRESHOLD=70
+    USAGE_THRESHOLD=80
     GPU_NUM=`nvidia-smi --query-gpu=count --format=csv,noheader,nounits -i 0`
     while true
     do

@@ -100,10 +100,13 @@ class PPOPolicy(PGPolicy):
         **kwargs: Any,
     ) -> None:
         # TODO lr, 3 optional, calculate kl.
+        # TODO minibatch clip good?
         super().__init__(None, optim, dist_fn, discount_factor, **kwargs)
-        self.ret_rms = RunningMeanStd(shape=())
-        self.clip_reward = 10.0
-        self.epsilon = 1e-8
+        # self.ret_rms = RunningMeanStd(shape=())
+        # self.clip_reward = 10.0
+        # self.epsilon = 1e-8
+        self.clip_num = 0
+        self.total_num = 0
         self.max_repeat = max_repeat
         self.target_kl = target_kl
         self._max_grad_norm = max_grad_norm
@@ -120,14 +123,12 @@ class PPOPolicy(PGPolicy):
             "Dual-clip PPO parameter should greater than 1.0."
         self._dual_clip = dual_clip
         self._value_clip = value_clip
-        self._rew_norm = reward_normalization
 
     def process_fn(
         self, batch: Batch, buffer: ReplayBuffer, indice: np.ndarray
     ) -> Batch:
         v_s, v_s_, old_log_prob = [], [], []
         with torch.no_grad():
-            #TODO too slow
             for b in batch.split(self._batch, shuffle=False, merge_last=True):
                 v_s_.append(self.critic(b.obs_next))
                 v_s.append(self.critic(b.obs))
@@ -200,7 +201,6 @@ class PPOPolicy(PGPolicy):
         # for _ in range(repeat):
         for step in range(self.max_repeat):
             approx_kls = []
-            # TODO shuffle
             for b in batch.split(batch_size, merge_last=True):
                 dist = self(b).dist
                 logp = dist.log_prob(b.act)
@@ -250,11 +250,15 @@ class PPOPolicy(PGPolicy):
         }
 
     def normalize_reward(self, reward: np.ndarray) -> np.ndarray:
+        #TODO check need mean
         """
         Normalize rewards using this VecNormalize's rewards statistics.
         Calling this method does not update statistics.
         """
-        reward = np.clip(reward / np.sqrt(self.ret_rms.var + self.epsilon), -self.clip_reward, self.clip_reward)
-        return reward
+        # reward = np.clip((reward - self.ret_rms.mean) / np.sqrt(self.ret_rms.var + self.epsilon), -self.clip_reward, self.clip_reward)
+        # reward = np.clip(reward / np.sqrt(self.ret_rms.var + self.epsilon), -self.clip_reward, self.clip_reward)
+        return reward.copy()
     def unnormalize_reward(self, reward: np.ndarray) -> np.ndarray:
-        return reward * np.sqrt(self.ret_rms.var + self.epsilon)
+        # return reward * np.sqrt(self.ret_rms.var + self.epsilon) + self.ret_rms.mean
+        # return reward * np.sqrt(self.ret_rms.var + self.epsilon)
+        return reward.copy()

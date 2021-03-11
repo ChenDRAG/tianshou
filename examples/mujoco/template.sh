@@ -18,7 +18,7 @@ main() {
             select_gpu
             txtname=${TXTLOGDIR}${TASK}_`date '+%m-%d-%H-%M-%S'`_seed_${seed}.txt
 
-            CUDA_VISIBLE_DEVICES=$selected_gpu python mujoco_ppo.py \
+            CUDA_VISIBLE_DEVICES=$selected_gpu python -u mujoco_ppo.py \
             --task $TASK \
             --hidden-sizes 64 64 \
             --target-kl 0 \

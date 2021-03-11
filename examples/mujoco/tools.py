@@ -50,7 +50,17 @@ def convert_tfevents_to_csv(dir = './', suffix = 'sorted'):
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument('--dir', type=str, default='/home/huayu/git/tianshou/examples/mujoco/ppobenchmark_newnorm/Humanoid-v3/ppo')
-    parser.add_argument('--suffix', type=str, default='Humanoid-v3_ppo')
+    parser.add_argument('--dir', type=str, default='/home/huayu/git/tianshou/examples/mujoco/now_rew_norm/Ant-v3/ppo')
+    parser.add_argument('--suffix', type=str, default='Reacher-v2_ppo')
     args = parser.parse_args()
     convert_tfevents_to_csv(args.dir, args.suffix)
+
+
+# cd /home/huayu/git/tianshou/examples/mujoco/now_rew_norm
+# a=`ls`
+# for i in $a
+# do
+#     python /home/huayu/git/tianshou/examples/mujoco/tools.py \
+#     --dir $i \
+#     --suffix ${i}_ppo
+# done

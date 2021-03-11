@@ -156,7 +156,7 @@ def get_args():
     parser.add_argument('--repeat-per-collect', type=int, default=1)
     parser.add_argument('--batch-size', type=int, default=64)# 64 in baselines
     parser.add_argument('--training-num', type=int, default=1)
-    parser.add_argument('--test-num', type=int, default=10)#ori 100
+    parser.add_argument('--test-num', type=int, default=10)
     parser.add_argument('--logdir', type=str, default='log')
     parser.add_argument('--render', type=float, default=0.)
     parser.add_argument(
@@ -259,7 +259,7 @@ def test_ppo(args=get_args()):
     test_collector = Collector(policy, test_envs)
     # log
     log_path = os.path.join(args.logdir, args.task, 'ppo', 'seed_' + str(
-        args.seed) + '_' + datetime.datetime.now().strftime('%m%d-%H%M%S'))
+        args.seed) + '_' + datetime.datetime.now().strftime('%m%d-%H%M%S') + '-' + args.task.replace('-', '_') + '_ppo' )
     writer = SummaryWriter(log_path)
     writer.add_text("args", str(args))
     logger = BasicLogger(writer)
