@@ -35,7 +35,7 @@ main() {
 function select_gpu(){
     MAX_NUM_PER_GPU=5
     MEMORY_THRESHOLD=70
-    USAGE_THRESHOLD=80
+    USAGE_THRESHOLD=95
     GPU_NUM=`nvidia-smi --query-gpu=count --format=csv,noheader,nounits -i 0`
     while true
     do

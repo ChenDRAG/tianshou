@@ -178,7 +178,6 @@ def get_args():
     return parser.parse_args()
 
 
-
 def test_ppo(args=get_args()):
     torch.set_num_threads(1)  # TODO we just need only one thread for NN
     env = gym.make(args.task)

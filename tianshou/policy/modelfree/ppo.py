@@ -137,11 +137,10 @@ class PPOPolicy(PGPolicy):
         batch.v_s = torch.cat(v_s, dim=0).flatten()  # old value
         v_s = self.unnormalize_reward(to_numpy(batch.v_s).flatten())
         v_s_ = self.unnormalize_reward(to_numpy(batch.v_s_).flatten())
-        batch.adv, batch.returns = self.compute_gae_return(
+        batch.adv, un_norm_returns = self.compute_gae_return(
             batch, buffer, indice, v_s_, v_s, gamma=self._gamma,
             gae_lambda=self._lambda, rew_norm=self._rew_norm)
-        self.ret_rms.update(batch.returns)
-        batch.returns = self.normalize_reward(batch.returns)
+        batch.returns = self.normalize_reward(un_norm_returns)
         # end_flag = batch.done.copy()
         # end_flag[np.isin(indice, buffer.unfinished_index())] = True
         # batch.returns = self._rew_to_go(batch, v_s_, end_flag)
@@ -149,6 +148,7 @@ class PPOPolicy(PGPolicy):
         batch.logp_old = torch.cat(old_log_prob, dim=0)
         batch.act = to_torch_as(batch.act, batch.v_s[0])
         batch.adv = to_torch_as(batch.adv, batch.v_s[0])
+        self.ret_rms.update(un_norm_returns)
         return batch
 
     # def _rew_to_go(self, batch, v_s_, end_flag):
@@ -255,10 +255,7 @@ class PPOPolicy(PGPolicy):
         Normalize rewards using this VecNormalize's rewards statistics.
         Calling this method does not update statistics.
         """
-        # reward = np.clip((reward - self.ret_rms.mean) / np.sqrt(self.ret_rms.var + self.epsilon), -self.clip_reward, self.clip_reward)
-        # reward = np.clip(reward / np.sqrt(self.ret_rms.var + self.epsilon), -self.clip_reward, self.clip_reward)
-        return reward.copy()
+        reward = reward / np.sqrt(self.ret_rms.var + self.epsilon)
+        return reward
     def unnormalize_reward(self, reward: np.ndarray) -> np.ndarray:
-        # return reward * np.sqrt(self.ret_rms.var + self.epsilon) + self.ret_rms.mean
-        # return reward * np.sqrt(self.ret_rms.var + self.epsilon)
-        return reward.copy()
+        return reward * np.sqrt(self.ret_rms.var + self.epsilon)

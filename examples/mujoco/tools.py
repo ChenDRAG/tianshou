@@ -43,9 +43,10 @@ def convert_tfevents_to_csv(dir = './', suffix = 'sorted'):
                 csv_file.close()
                 dirs.append(dirname)
                 break
-    for dirname in dirs:
-        head, tail = os.path.split(dirname)
-        os.rename(dirname, os.path.join(head, tail.replace('-', '_') + '-' + suffix))
+    if suffix:
+        for dirname in dirs:
+            head, tail = os.path.split(dirname)
+            os.rename(dirname, os.path.join(head, tail.replace('-', '_') + '-' + suffix))
 
 if __name__ == "__main__":
     import argparse
