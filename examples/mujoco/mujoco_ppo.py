@@ -147,7 +147,8 @@ def get_args():
     parser.add_argument('--task', type=str, default='Walker2d-v3')
     parser.add_argument('--seed', type=int, default=0)
     parser.add_argument('--buffer-size', type=int, default=8000)
-    parser.add_argument('--hidden-sizes', type=int, nargs='*', default=[64, 64])
+    parser.add_argument('--actor-hidden-sizes', type=int, nargs='*', default=[64, 64])
+    parser.add_argument('--critic-hidden-sizes', type=int, nargs='*', default=[64, 64])
     parser.add_argument('--lr', type=float, default=3e-4)
     parser.add_argument('--gamma', type=float, default=0.99)
     parser.add_argument('--epoch', type=int, default=100)
@@ -172,15 +173,35 @@ def get_args():
     parser.add_argument('--rew-norm', type=int, default=True)
     parser.add_argument('--dual-clip', type=float, default=None)
     parser.add_argument('--value-clip', type=int, default=True)
-    parser.add_argument('--target-kl', type=int, default=0.01)
+    parser.add_argument('--target-kl', type=int, default=0)
     parser.add_argument('--max-repeat', type=int, default=10)#10 in baselines /sb3
-    parser.add_argument('--temp_rnorm', type=int, default=1)#10 in baselines /sb3
+    parser.add_argument('--temp_init_method', type=str, default="traditional")#10 in baselines /sb3
+    parser.add_argument('--temp_bound_action', type=int, default=0)
+    parser.add_argument('--temp_norm_adv', type=int, default=1)
+    parser.add_argument('--temp_recompute_adv', type=int, default=0)
     return parser.parse_args()
 
+def auto_change_weight(args):
+    if args.actor_hidden_sizes[0]==1:
+        assert False
+        print("weight changed")
+        if "InvertedPendulum" in args.task:
+            args.actor_hidden_sizes = [16, 16]
+        elif "HalfCheetah" in args.task or "Reacher" in args.task or "Swimmer" in args.task or "InvertedDoublePendulum" in args.task:
+            args.actor_hidden_sizes = [32, 32]
+        elif "Hopper" in args.task or "Walker2d" in args.task:
+            args.actor_hidden_sizes = [64, 64]
+        elif "Ant" in args.task:
+            args.actor_hidden_sizes = [128, 128]
+        elif "Humanoid" in args.task:
+            args.actor_hidden_sizes = [256, 256]
+        else:
+            args.actor_hidden_sizes = [64, 64]
 
 def test_ppo(args=get_args()):
     torch.set_num_threads(1)  # TODO we just need only one thread for NN
     env = gym.make(args.task)
+    auto_change_weight(args)
     args.state_shape = env.observation_space.shape or env.observation_space.n
     args.action_shape = env.action_space.shape or env.action_space.n
     args.max_action = env.action_space.high[0]
@@ -202,22 +223,28 @@ def test_ppo(args=get_args()):
     train_envs.seed(args.seed)
     test_envs.seed(args.seed)
     # model
-    net_a = Net(args.state_shape, hidden_sizes=args.hidden_sizes, activation=nn.Tanh, device=args.device)
+    net_a = Net(args.state_shape, hidden_sizes=args.actor_hidden_sizes, activation=nn.Tanh, device=args.device)
     actor = ActorProb(net_a, args.action_shape, max_action=args.max_action, unbounded=True,
-                      device=args.device)
-    # TODO check unbounded and -0.5
-    actor.sigma_param = nn.Parameter(torch.as_tensor(-0.5 * np.ones((actor.output_dim, 1), dtype=np.float32)))
-    actor = actor.to(args.device)
-    net_c = Net(args.state_shape, hidden_sizes=args.hidden_sizes, activation=nn.Tanh, device=args.device)
+                      device=args.device).to(args.device)
+    net_c = Net(args.state_shape, hidden_sizes=args.critic_hidden_sizes, activation=nn.Tanh, device=args.device)
     critic = Critic(net_c, device=args.device).to(args.device)
 
-    # orthogonal initialization TODO checkout
-    for m in list(actor.modules()) + list(critic.modules()):
-        if isinstance(m, torch.nn.Linear):
-            torch.nn.init.orthogonal_(m.weight)
-            torch.nn.init.zeros_(m.bias)
+    def init_weight(actor, critic):
+        torch.nn.init.constant_(actor.sigma_param, -0.5)
+        for m in list(actor.modules()) + list(critic.modules()):
+            if isinstance(m, torch.nn.Linear):
+                torch.nn.init.orthogonal_(m.weight, gain=np.sqrt(2))
+                torch.nn.init.zeros_(m.bias)
+        # orthogonal initialization TODO checkout
+        if args.temp_init_method != "traditional":
+            for m in actor.mu.modules():
+                if isinstance(m, torch.nn.Linear):
+                    torch.nn.init.zeros_(m.bias)
+                    m.weight.data.copy_(0.01 * m.weight.data)
+
+    init_weight(actor, critic)
     optim = torch.optim.Adam(set(
-        actor.parameters()).union(critic.parameters()), lr=args.lr, eps=1e-5)
+        actor.parameters()).union(critic.parameters()), lr=args.lr)
 
     # replace DiagGuassian with Independent(Normal) which is equivalent
     # pass *logits to be consistent with policy.forward TODO
@@ -240,10 +267,13 @@ def test_ppo(args=get_args()):
         reward_normalization=args.rew_norm,
         max_repeat=args.max_repeat,
         target_kl=args.target_kl,
+        temp_bound_action=args.temp_bound_action,
         # dual_clip=args.dual_clip,
         # dual clip cause monotonically increasing log_std :)
         value_clip=args.value_clip,
-        # action_range=[env.action_space.low[0], env.action_space.high[0]],)
+        norm_adv=args.temp_norm_adv,
+        action_range=[env.action_space.low[0], env.action_space.high[0]],
+        recompute_adv=args.temp_recompute_adv,
         # if clip the action, ppo would not converge :)
         gae_lambda=args.gae_lambda)
     
@@ -258,7 +288,7 @@ def test_ppo(args=get_args()):
     test_collector = Collector(policy, test_envs)
     # log
     log_path = os.path.join(args.logdir, args.task, 'ppo', 'seed_' + str(
-        args.seed) + '_' + datetime.datetime.now().strftime('%m%d-%H%M%S') + '-' + args.task.replace('-', '_') + '_ppo' )
+        args.seed) + '_' + datetime.datetime.now().strftime('%m%d_%H%M%S') + '-' + args.task.replace('-', '_') + '_ppo' )
     writer = SummaryWriter(log_path)
     writer.add_text("args", str(args))
     logger = BasicLogger(writer)

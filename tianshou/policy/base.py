@@ -219,7 +219,7 @@ class BasePolicy(ABC, nn.Module):
         v_s: Optional[Union[np.ndarray, torch.Tensor]] = None, 
         gamma: float = 0.99,
         gae_lambda: float = 0.95,
-        rew_norm: bool = False,
+        adv_norm: bool = False,
     ) -> Batch:
         """Compute returns over given batch.
 
@@ -261,7 +261,7 @@ class BasePolicy(ABC, nn.Module):
         advantage = _gae_return(v_s, v_s_, rew, end_flag, gamma, gae_lambda)
         returns = advantage + v_s
         # TODO
-        if rew_norm and not np.isclose(advantage.std(), 0.0, 1e-2):
+        if adv_norm and not np.isclose(advantage.std(), 0.0, 1e-2):
             advantage = (advantage - advantage.mean()) / advantage.std()
         return advantage, returns
 

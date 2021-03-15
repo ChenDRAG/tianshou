@@ -93,10 +93,12 @@ class PPOPolicy(PGPolicy):
         gae_lambda: float = 0.95,
         dual_clip: Optional[float] = None,
         value_clip: bool = True,
-        reward_normalization: bool = True,
         max_batchsize: int = 256,
         max_repeat: int = 10,
+        temp_bound_action=0,
         target_kl: Optional[float] = None,
+        norm_adv = True,
+        recompute_adv = False,
         **kwargs: Any,
     ) -> None:
         # TODO lr, 3 optional, calculate kl.
@@ -123,30 +125,60 @@ class PPOPolicy(PGPolicy):
             "Dual-clip PPO parameter should greater than 1.0."
         self._dual_clip = dual_clip
         self._value_clip = value_clip
+        self.norm_adv = norm_adv
+        self.recompute_adv = recompute_adv
+        self.bound_action_method = temp_bound_action
+        self.buffer_buf = None
+        self.indice_buf = None
 
     def process_fn(
         self, batch: Batch, buffer: ReplayBuffer, indice: np.ndarray
     ) -> Batch:
-        v_s, v_s_, old_log_prob = [], [], []
+        self.compute_returns(batch, buffer, indice)
+        assert self.buffer_buf is None
+        assert self.indice_buf is None
+        self.buffer_buf = buffer
+        self.indice_buf = indice
+        old_log_prob = []
+        ori_acts = []
+        with torch.no_grad():
+            for b in batch.split(self._batch, shuffle=False, merge_last=True):
+                if self.bound_action_method != 2: 
+                    old_log_prob.append(self(b).dist.log_prob(to_torch_as(b.act, batch.v_s[0])))
+                else:
+                    ori_act = to_torch_as((np.log(1 + b.act/self._range[1]) - np.log(1 - b.act/self._range[1])) / 2.0, batch.v_s[0])
+                    ori_acts.append(ori_act)
+                    old_log_prob.append(self(b).dist.log_prob(ori_act))
+        if self.bound_action_method == 2:
+           batch.ori_act = torch.cat(ori_acts, dim=0)
+        batch.logp_old = torch.cat(old_log_prob, dim=0)
+        batch.act = to_torch_as(batch.act, batch.v_s[0])
+        return batch
+
+    def compute_returns(
+        self, batch: Batch, buffer: ReplayBuffer, indice: np.ndarray
+    ):
+        v_s, v_s_ = [], []
         with torch.no_grad():
             for b in batch.split(self._batch, shuffle=False, merge_last=True):
                 v_s_.append(self.critic(b.obs_next))
                 v_s.append(self.critic(b.obs))
-                old_log_prob.append(self(b).dist.log_prob(to_torch_as(b.act, v_s[0])))
         batch.v_s_ = torch.cat(v_s_, dim=0).flatten()
-        batch.v_s = torch.cat(v_s, dim=0).flatten()  # old value
-        v_s = self.unnormalize_reward(to_numpy(batch.v_s).flatten())
-        v_s_ = self.unnormalize_reward(to_numpy(batch.v_s_).flatten())
+        batch.v_s = torch.cat(v_s, dim=0).flatten()
+        if self._rew_norm:
+            un_norm_v_s = self.unnormalize_reward(to_numpy(batch.v_s).flatten())
+            un_norm_v_s_ = self.unnormalize_reward(to_numpy(batch.v_s_).flatten())
         batch.adv, un_norm_returns = self.compute_gae_return(
-            batch, buffer, indice, v_s_, v_s, gamma=self._gamma,
-            gae_lambda=self._lambda, rew_norm=self._rew_norm)
-        batch.returns = self.normalize_reward(un_norm_returns)
+            batch, buffer, indice, un_norm_v_s_, un_norm_v_s, gamma=self._gamma,
+            gae_lambda=self._lambda)
+        if self.norm_adv:
+            batch.adv = (batch.adv - batch.adv.mean())/batch.adv.std()
+        if self._rew_norm:
+            batch.returns = self.normalize_reward(un_norm_returns)
         # end_flag = batch.done.copy()
         # end_flag[np.isin(indice, buffer.unfinished_index())] = True
         # batch.returns = self._rew_to_go(batch, v_s_, end_flag)
         batch.returns = to_torch_as(batch.returns, batch.v_s[0])
-        batch.logp_old = torch.cat(old_log_prob, dim=0)
-        batch.act = to_torch_as(batch.act, batch.v_s[0])
         batch.adv = to_torch_as(batch.adv, batch.v_s[0])
         self.ret_rms.update(un_norm_returns)
         return batch
@@ -189,8 +221,8 @@ class PPOPolicy(PGPolicy):
         else:
             dist = self.dist_fn(logits)
         act = dist.sample()
-        if self._range:
-            act = act.clamp(self._range[0], self._range[1])
+        if self.bound_action_method == 2:
+            act = torch.tanh(act) * self._range[1]
         return Batch(logits=logits, act=act, state=h, dist=dist)
 
     def learn(  # type: ignore
@@ -199,16 +231,24 @@ class PPOPolicy(PGPolicy):
         self.change_lr(self.optim)
         losses, clip_losses, vf_losses, ent_losses = [], [], [], []
         # for _ in range(repeat):
+        assert self.max_repeat == 10
         for step in range(self.max_repeat):
+            if self.recompute_adv and step > 0:
+                batch = self.compute_returns(batch, self.buffer_buf, self.indice_buf)
             approx_kls = []
             for b in batch.split(batch_size, merge_last=True):
                 dist = self(b).dist
-                logp = dist.log_prob(b.act)
+                # ori_act = (torch.log(1 + b.act) - torch.log(1 - b.act)) / 2.0
+                if self.bound_action_method != 2:
+                    logp = dist.log_prob(b.act)
+                else:
+                    logp = dist.log_prob(b.ori_act)
                 ratio = (logp - b.logp_old).exp().float()
                 ratio = ratio.reshape(ratio.size(0), -1).transpose(0, 1)
                 surr1 = ratio * b.adv
                 surr2 = ratio.clamp(1.0 - self._eps_clip, 1.0 + self._eps_clip) * b.adv
                 if self._dual_clip:
+                    assert False
                     clip_loss = -torch.max(
                         torch.min(surr1, surr2), self._dual_clip * b.adv
                     ).mean()
@@ -239,9 +279,12 @@ class PPOPolicy(PGPolicy):
                 approx_kls.append(torch.mean(b.logp_old - logp).detach().cpu().numpy())
             
             if self.target_kl and np.mean(approx_kls) > 1.5 * self.target_kl:
+                assert False
                 print(f"Early stopping at step {step} due to reaching max kl: {np.mean(approx_kls):.3f}")
                 break
-
+        
+        self.buffer_buf = None
+        self.indice_buf = None
         return {
             "loss": losses,
             "loss/clip": clip_losses,

@@ -220,7 +220,11 @@ class Collector(object):
                 self.data.update(policy=policy, act=act)
 
             # step in env
-            obs_next, rew, done, info = self.env.step(self.data.act, id=ready_env_ids)
+            arange = self.policy._range
+            if self.policy.bound_action_method == 1:
+                obs_next, rew, done, info = self.env.step(np.clip(self.data.act, arange[0], arange[1]), id=ready_env_ids)
+            else:
+                obs_next, rew, done, info = self.env.step(self.data.act, id=ready_env_ids)
 
             self.data.update(obs_next=obs_next, rew=rew, done=done, info=info)
             if self.preprocess_fn:

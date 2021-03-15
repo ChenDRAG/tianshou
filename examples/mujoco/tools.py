@@ -1,5 +1,7 @@
 import numpy as np
 from torch.utils.tensorboard import SummaryWriter
+import free_mjc
+import gym
 def convert_tfevents_to_csv(dir = './', suffix = 'sorted'):
     """recursively find all tfevent file under dir, and create
     a csv file compatible with openai baseline. This function assumes that 
@@ -55,6 +57,7 @@ if __name__ == "__main__":
     parser.add_argument('--suffix', type=str, default='')
     args = parser.parse_args()
     convert_tfevents_to_csv(args.dir, args.suffix)
+
 
 
 # cd /home/huayu/git/tianshou/examples/mujoco/now_rew_norm
