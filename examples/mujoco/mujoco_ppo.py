@@ -183,7 +183,6 @@ def get_args():
 
 def auto_change_weight(args):
     if args.actor_hidden_sizes[0]==1:
-        assert False
         print("weight changed")
         if "InvertedPendulum" in args.task:
             args.actor_hidden_sizes = [16, 16]
