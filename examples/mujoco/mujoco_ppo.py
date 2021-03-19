@@ -186,14 +186,12 @@ def auto_change_weight(args):
         print("weight changed")
         if "InvertedPendulum" in args.task:
             args.actor_hidden_sizes = [16, 16]
-        elif "HalfCheetah" in args.task or "Reacher" in args.task or "Swimmer" in args.task or "InvertedDoublePendulum" in args.task:
+        elif "Reacher" in args.task or "Swimmer" in args.task or "InvertedDoublePendulum" in args.task:
             args.actor_hidden_sizes = [32, 32]
-        elif "Hopper" in args.task or "Walker2d" in args.task:
+        elif "HalfCheetah" in args.task or "Hopper" in args.task or "Walker2d" in args.task or "Ant" in args.task:
             args.actor_hidden_sizes = [64, 64]
-        elif "Ant" in args.task:
-            args.actor_hidden_sizes = [128, 128]
         elif "Humanoid" in args.task:
-            args.actor_hidden_sizes = [256, 256]
+            args.actor_hidden_sizes = [128, 128]
         else:
             args.actor_hidden_sizes = [64, 64]
 

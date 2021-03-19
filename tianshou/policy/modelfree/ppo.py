@@ -107,6 +107,9 @@ class PPOPolicy(PGPolicy):
         # self.ret_rms = RunningMeanStd(shape=())
         # self.clip_reward = 10.0
         # self.epsilon = 1e-8
+        self.ret_rms_rtg = RunningMeanStd(shape=())
+        self.ret_rms_rtg_nb = RunningMeanStd(shape=())
+        self.ret_rms_l0 = RunningMeanStd(shape=())
         self.clip_num = 0
         self.total_num = 0
         self.max_repeat = max_repeat
@@ -171,6 +174,17 @@ class PPOPolicy(PGPolicy):
         batch.adv, un_norm_returns = self.compute_gae_return(
             batch, buffer, indice, un_norm_v_s_, un_norm_v_s, gamma=self._gamma,
             gae_lambda=self._lambda)
+
+        _, un_norm_returns_rtg = self.compute_gae_return(
+            batch, buffer, indice, un_norm_v_s_, un_norm_v_s, gamma=self._gamma,
+            gae_lambda=1)
+        _, un_norm_returns_rtg_nb = self.compute_gae_return(
+            batch, buffer, indice, np.zeros_like(un_norm_v_s_), np.zeros_like(un_norm_v_s), gamma=self._gamma,
+            gae_lambda=1)
+        _, un_norm_returns_l0 = self.compute_gae_return(
+            batch, buffer, indice, un_norm_v_s_, un_norm_v_s, gamma=self._gamma,
+            gae_lambda=0)
+
         if self.norm_adv:
             batch.adv = (batch.adv - batch.adv.mean())/batch.adv.std()
         if self._rew_norm:
@@ -181,6 +195,11 @@ class PPOPolicy(PGPolicy):
         batch.returns = to_torch_as(batch.returns, batch.v_s[0])
         batch.adv = to_torch_as(batch.adv, batch.v_s[0])
         self.ret_rms.update(un_norm_returns)
+        self.ret_rms_rtg.update(un_norm_returns_rtg)
+        self.ret_rms_rtg_nb.update(un_norm_returns_rtg_nb)
+        self.ret_rms_l0.update(un_norm_returns_l0)
+        self.mean = un_norm_returns.mean()
+        self.std = un_norm_returns.std()
         return batch
 
     # def _rew_to_go(self, batch, v_s_, end_flag):
@@ -290,6 +309,16 @@ class PPOPolicy(PGPolicy):
             "loss/clip": clip_losses,
             "loss/vf": vf_losses,
             "loss/ent": ent_losses,
+            "loss/gae_std":[np.sqrt(self.ret_rms.var)],
+            "loss/gae_mean":[self.ret_rms.mean],
+            "loss/rtg_std":[np.sqrt(self.ret_rms_rtg.var)],
+            "loss/rtg_mean":[self.ret_rms_rtg.mean],
+            "loss/rtg_std_nb":[np.sqrt(self.ret_rms_rtg_nb.var)],
+            "loss/rtg_mean_nb":[self.ret_rms_rtg_nb.mean],
+            "loss/l0_std":[np.sqrt(self.ret_rms_l0.var)],
+            "loss/l0_mean":[self.ret_rms_l0.mean],
+            "loss/real_std":[self.std],
+            "loss/real_mean":[self.mean],
         }
 
     def normalize_reward(self, reward: np.ndarray) -> np.ndarray:
