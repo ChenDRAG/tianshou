@@ -223,6 +223,8 @@ class Collector(object):
             arange = self.policy._range
             if self.policy.bound_action_method == 1:
                 obs_next, rew, done, info = self.env.step(np.clip(self.data.act, arange[0], arange[1]), id=ready_env_ids)
+            elif self.policy.bound_action_method == 2 and self.policy.__class__.__name__ == "PGPolicy":
+                obs_next, rew, done, info = self.env.step(arange[1]*np.tanh(self.data.act), id=ready_env_ids)
             else:
                 obs_next, rew, done, info = self.env.step(self.data.act, id=ready_env_ids)
 

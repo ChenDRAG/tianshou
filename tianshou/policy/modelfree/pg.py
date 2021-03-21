@@ -63,6 +63,9 @@ class PGPolicy(BasePolicy):
         dist_fn: Type[torch.distributions.Distribution],
         discount_factor: float = 0.99,
         reward_normalization: bool = False,
+        action_range: Optional[Tuple[float, float]] = None,
+        temp_minusmean = 0,
+        temp_bound_action=0,
         **kwargs: Any,
     ) -> None:
         super().__init__(**kwargs)
@@ -77,6 +80,10 @@ class PGPolicy(BasePolicy):
         self._gamma = discount_factor
         self._rew_norm = reward_normalization
 
+        self._range = action_range
+        self.bound_action_method = temp_bound_action
+        self.minus = temp_minusmean
+
     def process_fn(
         self, batch: Batch, buffer: ReplayBuffer, indice: np.ndarray
     ) -> Batch:
@@ -90,12 +97,15 @@ class PGPolicy(BasePolicy):
         """
         # batch.returns = self._vanilla_returns(batch)
         # batch.returns = self._vectorized_returns(batch)
-        v_s_ = self.ret_rms
-        _, batch.returns = self.compute_gae_return(
+        v_s_ = np.full(indice.shape, self.ret_rms.mean)
+        _, un_norm_returns = self.compute_gae_return(
             batch, buffer, indice, v_s_, gamma=self._gamma,
-            gae_lambda=1.0, rew_norm=False)
-        self.ret_rms.update(batch.returns)
-        batch.returns = self.normalize_reward(batch.returns)
+            gae_lambda=1.0, adv_norm=False)
+        self.ret_rms.update(un_norm_returns)
+        self.mean = un_norm_returns.mean()
+        self.std = un_norm_returns.std()
+        # TODO check minus okay, think how norm adv
+        batch.returns = self.normalize_reward(un_norm_returns)
         return batch
 
     def forward(
@@ -124,57 +134,45 @@ class PGPolicy(BasePolicy):
         else:
             dist = self.dist_fn(logits)
         act = dist.sample()
-        if self._range and False:
-            act = act.clamp(self._range[0], self._range[1])
         return Batch(logits=logits, act=act, state=h, dist=dist)
 
     def learn(  # type: ignore
         self, batch: Batch, batch_size: int, repeat: int, **kwargs: Any
     ) -> Dict[str, List[float]]:
-        # self.change_lr(self.optim)
+        # TODO whether change lr
+        self.change_lr(self.optim)
         losses = []
         for _ in range(repeat):
             for b in batch.split(batch_size, merge_last=True):
                 self.optim.zero_grad()
-                dist = self(b).dist
-                a = to_torch_as(b.act, dist.logits)
-                r = to_torch_as(b.returns, dist.logits)
+                t = self(b)
+                dist = t.dist
+                a = to_torch_as(b.act, t.act)
+                r = to_torch_as(b.returns, t.act)
                 log_prob = dist.log_prob(a).reshape(len(r), -1).transpose(0, 1)
                 loss = -(log_prob * r).mean()
                 loss.backward()
                 self.optim.step()
                 losses.append(loss.item())
-        return {"loss": losses}
+        return {
+            "loss": losses,
+            "loss/gae_std":[np.sqrt(self.ret_rms.var)],
+            "loss/gae_mean":[self.ret_rms.mean],
+            "loss/real_std":[self.std],
+            "loss/real_mean":[self.mean],
+        }
     def normalize_reward(self, reward: np.ndarray) -> np.ndarray:
         """
         Normalize rewards using this VecNormalize's rewards statistics.
         Calling this method does not update statistics.
         """
-        reward = np.clip(reward / np.sqrt(self.ret_rms.var + self.epsilon), -self.clip_reward, self.clip_reward)
+        if self.minus:
+            reward = (reward - self.ret_rms.mean) / np.sqrt(self.ret_rms.var + self.epsilon)
+        else:
+            reward = reward / np.sqrt(self.ret_rms.var + self.epsilon)
         return reward
     def unnormalize_reward(self, reward: np.ndarray) -> np.ndarray:
-        return reward * np.sqrt(self.ret_rms.var + self.epsilon)
-
-    # def _vanilla_returns(self, batch):
-    #     returns = batch.rew[:]
-    #     last = 0
-    #     for i in range(len(returns) - 1, -1, -1):
-    #         if not batch.done[i]:
-    #             returns[i] += self._gamma * last
-    #         last = returns[i]
-    #     return returns
-
-    # def _vectorized_returns(self, batch):
-    #     # according to my tests, it is slower than _vanilla_returns
-    #     # import scipy.signal
-    #     convolve = np.convolve
-    #     # convolve = scipy.signal.convolve
-    #     rew = batch.rew[::-1]
-    #     batch_size = len(rew)
-    #     gammas = self._gamma ** np.arange(batch_size)
-    #     c = convolve(rew, gammas)[:batch_size]
-    #     T = np.where(batch.done[::-1])[0]
-    #     d = np.zeros_like(rew)
-    #     d[T] += c[T] - rew[T]
-    #     d[T[1:]] -= d[T[:-1]] * self._gamma ** np.diff(T)
-    #     return (c - convolve(d, gammas)[:batch_size])[::-1]
+        if self.minus:
+            return reward * np.sqrt(self.ret_rms.var + self.epsilon) + self.ret_rms.mean
+        else:
+            return reward * np.sqrt(self.ret_rms.var + self.epsilon)

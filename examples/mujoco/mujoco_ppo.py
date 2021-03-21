@@ -272,7 +272,8 @@ def test_ppo(args=get_args()):
         action_range=[env.action_space.low[0], env.action_space.high[0]],
         recompute_adv=args.temp_recompute_adv,
         # if clip the action, ppo would not converge :)
-        gae_lambda=args.gae_lambda)
+        gae_lambda=args.gae_lambda,
+        action_space=env.action_space)
     
     policy.change_lr = change_lr
 
@@ -288,7 +289,7 @@ def test_ppo(args=get_args()):
         args.seed) + '_' + datetime.datetime.now().strftime('%m%d_%H%M%S') + '-' + args.task.replace('-', '_') + '_ppo' )
     writer = SummaryWriter(log_path)
     writer.add_text("args", str(args))
-    logger = BasicLogger(writer)
+    logger = BasicLogger(writer, update_interval=10)
 
     def save_fn(policy):
         torch.save(policy.state_dict(), os.path.join(log_path, 'policy.pth'))

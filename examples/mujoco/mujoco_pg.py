@@ -5,7 +5,9 @@ import torch
 import datetime
 import argparse
 import numpy as np
+from torch import nn
 from torch.utils.tensorboard import SummaryWriter
+from torch.distributions import Independent, Normal
 
 from tianshou.policy import PGPolicy
 from tianshou.utils import BasicLogger
@@ -13,9 +15,8 @@ from tianshou.env import SubprocVectorEnv
 from tianshou.utils.net.common import Net
 from tianshou.trainer import onpolicy_trainer
 from tianshou.data import Collector, ReplayBuffer, VectorReplayBuffer
-from torch.distributions import Independent, Normal
 
-from tianshou.utils.net.continuous import Critic
+from tianshou.utils.net.continuous import ActorProb
 from typing import Any, List, Union, Optional, Callable, Tuple
 class RunningMeanStd(object):
     def __init__(self, epsilon: float = 1e-4, shape: Tuple[int, ...] = ()):
@@ -144,16 +145,16 @@ def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('--task', type=str, default='Walker2d-v3')
     parser.add_argument('--seed', type=int, default=0)
-    parser.add_argument('--buffer-size', type=int, default=8000)
+    parser.add_argument('--buffer-size', type=int, default=4096)
     parser.add_argument('--hidden-sizes', type=int, nargs='*', default=[64, 64])
-    parser.add_argument('--lr', type=float, default=3e-4)
+    parser.add_argument('--lr', type=float, default=1e-3)
     parser.add_argument('--gamma', type=float, default=0.99)
     parser.add_argument('--epoch', type=int, default=100)
     parser.add_argument('--step-per-epoch', type=int, default=30000)
     parser.add_argument('--step-per-collect', type=int, default=2048)
     parser.add_argument('--repeat-per-collect', type=int, default=1)
     parser.add_argument('--batch-size', type=int, default=99999)
-    parser.add_argument('--training-num', type=int, default=1)
+    parser.add_argument('--training-num', type=int, default=64)
     parser.add_argument('--test-num', type=int, default=10)
     parser.add_argument('--logdir', type=str, default='log')
     parser.add_argument('--render', type=float, default=0.)
@@ -163,6 +164,9 @@ def get_args():
     parser.add_argument('--resume-path', type=str, default=None)
     # vpg special
     parser.add_argument('--rew-norm', type=int, default=True)
+    parser.add_argument('--temp_bound_action', type=int, default=1)
+    parser.add_argument('--temp_lrdecay', type=int, default=0)
+    parser.add_argument('--temp_minusmean', type=int, default=0)
     return parser.parse_args()
 
 
@@ -192,15 +196,36 @@ def test_vpg(args=get_args()):
     # model
     net_a = Net(args.state_shape, hidden_sizes=args.hidden_sizes, activation=nn.Tanh, device=args.device)
     actor = ActorProb(net_a, args.action_shape, max_action=args.max_action, unbounded=True,
-                      device=args.device)
-    # TODO check unbounded and -0.5
-    actor.sigma_param = nn.Parameter(torch.as_tensor(-0.5 * np.ones((actor.output_dim, 1), dtype=np.float32)))
-    actor = actor.to(args.device)
-    # TODO consider init/ linear decay/ conditional sigma / bounded action
+                      device=args.device).to(args.device)
+    torch.nn.init.constant_(actor.sigma_param, -0.5)
+    for m in actor.modules():
+        if isinstance(m, torch.nn.Linear):
+            # orthogonal initialization
+            torch.nn.init.orthogonal_(m.weight, gain=np.sqrt(2))
+            torch.nn.init.zeros_(m.bias)
+    for m in actor.mu.modules():
+        if isinstance(m, torch.nn.Linear):
+            torch.nn.init.zeros_(m.bias)
+            m.weight.data.copy_(0.01 * m.weight.data)
+
     optim = torch.optim.Adam(actor.parameters(), lr=args.lr)
     def dist(*logits):
         return Independent(Normal(*logits), 1)
-    policy = PGPolicy(actor, optim, dist, args.gamma, reward_normalization=args.rew_norm)
+    if args.temp_lrdecay:
+        delta = args.lr / (np.ceil(args.step_per_epoch / args.step_per_collect) * args.epoch)
+    else:
+        delta = 0.0
+    print(delta)
+    def change_lr(optim):
+        for param_group in optim.param_groups:
+            param_group['lr'] = param_group['lr'] - delta
+
+    policy = PGPolicy(actor, optim, dist, args.gamma, reward_normalization=args.rew_norm,
+        temp_bound_action=args.temp_bound_action,
+        temp_minusmean=args.temp_minusmean,
+        action_range=[env.action_space.low[0], env.action_space.high[0]],
+        action_space=env.action_space)
+    policy.change_lr = change_lr
                       
     # collector
     if args.training_num > 1:
@@ -211,10 +236,10 @@ def test_vpg(args=get_args()):
     test_collector = Collector(policy, test_envs)
     # log
     log_path = os.path.join(args.logdir, args.task, 'vpg', 'seed_' + str(
-        args.seed) + '_' + datetime.datetime.now().strftime('%m%d-%H%M%S'))
+        args.seed) + '_' + datetime.datetime.now().strftime('%m%d_%H%M%S') + '-' + args.task.replace('-', '_') + '_vpg' )
     writer = SummaryWriter(log_path)
     writer.add_text("args", str(args))
-    logger = BasicLogger(writer)
+    logger = BasicLogger(writer, update_interval=10)
 
     def save_fn(policy):
         torch.save(policy.state_dict(), os.path.join(log_path, 'policy.pth'))
