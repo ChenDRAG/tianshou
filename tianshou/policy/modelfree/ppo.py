@@ -99,6 +99,7 @@ class PPOPolicy(PGPolicy):
         target_kl: Optional[float] = None,
         norm_adv = True,
         recompute_adv = False,
+        enhance_critic = 0,
         **kwargs: Any,
     ) -> None:
         # TODO lr, 3 optional, calculate kl.
@@ -133,11 +134,34 @@ class PPOPolicy(PGPolicy):
         self.bound_action_method = temp_bound_action
         self.buffer_buf = None
         self.indice_buf = None
+        self.enhance_critic = enhance_critic
 
     def process_fn(
         self, batch: Batch, buffer: ReplayBuffer, indice: np.ndarray
     ) -> Batch:
-        self.compute_returns(batch, buffer, indice)
+        # self.compute_returns(batch, buffer, indice)
+        print_loss = []
+        if self.enhance_critic > 0:
+            for _ in range(self.enhance_critic):
+                vf_losses = []
+                self.compute_returns(batch, buffer, indice)
+                for b in batch.split(64, merge_last=True):
+                    value = self.critic(b.obs).flatten()
+                    if self._value_clip:
+                        v_clip = b.v_s + (value - b.v_s).clamp(-self._eps_clip, self._eps_clip)
+                        vf1 = (b.returns - value).pow(2)
+                        vf2 = (b.returns - v_clip).pow(2)
+                        vf_loss = 0.5 * torch.max(vf1, vf2).mean()
+                    else:
+                        vf_loss = 0.5 * (b.returns - value).pow(2).mean()
+                    vf_losses.append(vf_loss.item())
+
+                    loss = self._weight_vf * vf_loss
+                    self.optim.zero_grad()
+                    loss.backward()
+                    self.optim.step()
+                print_loss.append(np.sum(vf_losses))
+            print(print_loss)
         assert self.buffer_buf is None
         assert self.indice_buf is None
         self.buffer_buf = buffer
@@ -195,12 +219,13 @@ class PPOPolicy(PGPolicy):
         batch.returns = to_torch_as(batch.returns, batch.v_s[0])
         batch.adv = to_torch_as(batch.adv, batch.v_s[0])
         self.ret_rms.update(un_norm_returns)
-        self.ret_rms_rtg.update(un_norm_returns_rtg)
-        self.ret_rms_rtg_nb.update(un_norm_returns_rtg_nb)
-        self.ret_rms_l0.update(un_norm_returns_l0)
-        self.mean = un_norm_returns.mean()
-        self.std = un_norm_returns.std()
+        # self.ret_rms_rtg.update(un_norm_returns_rtg)
+        # self.ret_rms_rtg_nb.update(un_norm_returns_rtg_nb)
+        # self.ret_rms_l0.update(un_norm_returns_l0)
+        # self.mean = un_norm_returns.mean()
+        # self.std = un_norm_returns.std()
         return batch
+            
 
     # def _rew_to_go(self, batch, v_s_, end_flag):
     #     v_s_ = to_numpy(v_s_.flatten())
@@ -247,6 +272,7 @@ class PPOPolicy(PGPolicy):
     def learn(  # type: ignore
         self, batch: Batch, batch_size: int, repeat: int, **kwargs: Any
     ) -> Dict[str, List[float]]:
+        assert batch_size == 64
         self.change_lr(self.optim)
         losses, clip_losses, vf_losses, ent_losses = [], [], [], []
         # for _ in range(repeat):
@@ -275,19 +301,20 @@ class PPOPolicy(PGPolicy):
                     clip_loss = -torch.min(surr1, surr2).mean()
                 clip_losses.append(clip_loss.item())
 
-                value = self.critic(b.obs).flatten()
-                if self._value_clip:
-                    v_clip = b.v_s + (value - b.v_s).clamp(-self._eps_clip, self._eps_clip)
-                    vf1 = (b.returns - value).pow(2)
-                    vf2 = (b.returns - v_clip).pow(2)
-                    vf_loss = 0.5 * torch.max(vf1, vf2).mean()
-                else:
-                    vf_loss = 0.5 * (b.returns - value).pow(2).mean()
-                vf_losses.append(vf_loss.item())
+                # value = self.critic(b.obs).flatten()
+                # if self._value_clip:
+                #     v_clip = b.v_s + (value - b.v_s).clamp(-self._eps_clip, self._eps_clip)
+                #     vf1 = (b.returns - value).pow(2)
+                #     vf2 = (b.returns - v_clip).pow(2)
+                #     vf_loss = 0.5 * torch.max(vf1, vf2).mean()
+                # else:
+                #     vf_loss = 0.5 * (b.returns - value).pow(2).mean()
+                # vf_losses.append(vf_loss.item())
                 e_loss = dist.entropy().mean()
                 ent_losses.append(e_loss.item())
-                loss = clip_loss + self._weight_vf * vf_loss \
-                    - self._weight_ent * e_loss
+                # loss = clip_loss + self._weight_vf * vf_loss \
+                #     - self._weight_ent * e_loss
+                loss = clip_loss - self._weight_ent * e_loss
                 losses.append(loss.item())
                 self.optim.zero_grad()
                 loss.backward()
@@ -307,18 +334,18 @@ class PPOPolicy(PGPolicy):
         return {
             "loss": losses,
             "loss/clip": clip_losses,
-            "loss/vf": vf_losses,
+            # "loss/vf": vf_losses,
             "loss/ent": ent_losses,
-            "loss/gae_std":[np.sqrt(self.ret_rms.var)],
-            "loss/gae_mean":[self.ret_rms.mean],
-            "loss/rtg_std":[np.sqrt(self.ret_rms_rtg.var)],
-            "loss/rtg_mean":[self.ret_rms_rtg.mean],
-            "loss/rtg_std_nb":[np.sqrt(self.ret_rms_rtg_nb.var)],
-            "loss/rtg_mean_nb":[self.ret_rms_rtg_nb.mean],
-            "loss/l0_std":[np.sqrt(self.ret_rms_l0.var)],
-            "loss/l0_mean":[self.ret_rms_l0.mean],
-            "loss/real_std":[self.std],
-            "loss/real_mean":[self.mean],
+            # "loss/gae_std":[np.sqrt(self.ret_rms.var)],
+            # "loss/gae_mean":[self.ret_rms.mean],
+            # "loss/rtg_std":[np.sqrt(self.ret_rms_rtg.var)],
+            # "loss/rtg_mean":[self.ret_rms_rtg.mean],
+            # "loss/rtg_std_nb":[np.sqrt(self.ret_rms_rtg_nb.var)],
+            # "loss/rtg_mean_nb":[self.ret_rms_rtg_nb.mean],
+            # "loss/l0_std":[np.sqrt(self.ret_rms_l0.var)],
+            # "loss/l0_mean":[self.ret_rms_l0.mean],
+            # "loss/real_std":[self.std],
+            # "loss/real_mean":[self.mean],
         }
 
     def normalize_reward(self, reward: np.ndarray) -> np.ndarray:

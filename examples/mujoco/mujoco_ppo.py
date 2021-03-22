@@ -179,6 +179,7 @@ def get_args():
     parser.add_argument('--temp_bound_action', type=int, default=0)
     parser.add_argument('--temp_norm_adv', type=int, default=1)
     parser.add_argument('--temp_recompute_adv', type=int, default=0)
+    parser.add_argument('--enhance_critic', type=int, default=0)
     return parser.parse_args()
 
 def auto_change_weight(args):
@@ -273,7 +274,8 @@ def test_ppo(args=get_args()):
         recompute_adv=args.temp_recompute_adv,
         # if clip the action, ppo would not converge :)
         gae_lambda=args.gae_lambda,
-        action_space=env.action_space)
+        action_space=env.action_space,
+        enhance_critic=args.enhance_critic)
     
     policy.change_lr = change_lr
 
