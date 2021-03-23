@@ -109,7 +109,43 @@ By comparison to both classic literature and open source implementations (e.g., 
 
 ## Onpolicy Algorithms
 
-TBD
+### REINFORCE
+
+|      Environment       | Tianshou(10M steps) |
+| :--------------------: | :-----------------: |
+|          Ant           |  **1108.1±323.1**   |
+|      HalfCheetah       |  **1138.8±104.7**   |
+|         Hopper         |   **416.0±104.7**   |
+|        Walker2d        |   **440.9±148.2**   |
+|        Swimmer         |    **35.6±2.6**     |
+|        Humanoid        |   **464.3±58.4**    |
+|        Reacher         |    **-5.5±0.2**     |
+|    InvertedPendulum    |   **1000.0±0.0**    |
+| InvertedDoublePendulum |  **7726.2±1287.3**  |
+
+
+|      Environment       |      Tianshou(REINFORCE 3M steps)      | [SpinningUp (VPG Pytorch)](https://spinningup.openai.com/en/latest/spinningup/bench_vpg.html) |
+| :--------------------: | :--------------------------: | :------------------------: |
+|          Ant           |       **474.9+-133.5**       |             ~5             |
+|      HalfCheetah       |       **884.0+-41.0**        |            ~600            |
+|         Hopper         |         395.8+-64.5*         |          **~800**          |
+|        Walker2d        |         412.0+-52.4          |          **~460**          |
+|        Swimmer         |          35.3+-1.4           |          **~51**           |
+|        Humanoid        |       **438.2+-47.8**        |             N              |
+|        Reacher         |        **-10.5+-0.7**        |             N              |
+|    InvertedPendulum    |        **999.2+-2.4**        |             N              |
+| InvertedDoublePendulum |      **1059.7+-307.7**       |             N              |
+
+\* details<sup>[[5]](#footnote5)</sup><sup>[[6]](#footnote6)</sup>
+
+#### Hints for REINFORCE
+
+
+
+
+
+
+
 
 
 
