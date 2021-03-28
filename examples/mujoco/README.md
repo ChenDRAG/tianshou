@@ -16,7 +16,8 @@ Supported algorithms are listed below:
 - [Twin Delayed DDPG (TD3)](https://arxiv.org/pdf/1802.09477.pdf), [commit id](https://github.com/thu-ml/tianshou/tree/e605bdea942b408126ef4fbc740359773259c9ec)
 - [Soft Actor-Critic (SAC)](https://arxiv.org/pdf/1812.05905.pdf), [commit id](https://github.com/thu-ml/tianshou/tree/e605bdea942b408126ef4fbc740359773259c9ec)
 - [REINFORCE algorithm](https://papers.nips.cc/paper/1999/file/464d828b85b0bed98e80ade0a5c43b0f-Paper.pdf), [commit id](https://github.com/thu-ml/tianshou/tree/e27b5a26f330de446fe15388bf81c3777f024fb9)
-- A2C, commit id (TODO)
+- [Advantage Actor-Critic (A2C)](https://openai.com/blog/baselines-acktr-a2c/), [commit id](https://github.com/thu-ml/tianshou/tree/e27b5a26f330de446fe15388bf81c3777f024fb9)
+- [Proximal Policy Optimization (PPO)](https://arxiv.org/pdf/1707.06347.pdf), [commit id](https://github.com/thu-ml/tianshou/tree/e27b5a26f330de446fe15388bf81c3777f024fb9)
 
 ## Offpolicy algorithms
 
@@ -188,6 +189,32 @@ By comparison to both classic literature and open source implementations (e.g., 
 5. We original paper of A3C use RMSprop optimizer, we find that Adam with the same learning rate works equally well. We use RMSprop anyway. Again, for consistency.
 6. We notice that in SB3's implementation of A2C that set `gae-lambda` to 1 by default, we don't know why and after doing some experiments, results show 0.95 is better overall.
 7. We find out that `step-per-collect=256`, `training-num=8` are also good hyperparameters. You can have a try.
+
+### PPO
+
+|      Environment       |      Tianshou      | [ikostrikov/pytorch-a2c-ppo-acktr-gail](https://github.com/ikostrikov/pytorch-a2c-ppo-acktr-gail)| [PPO paper](https://arxiv.org/pdf/1707.06347.pdf)|[baselines](http://htmlpreview.github.io/?https://github.com/openai/baselines/blob/master/benchmarks_mujoco1M.htm)|[spinningup(pytorch)](https://spinningup.openai.com/en/latest/spinningup/bench_ppo.html)|
+| :--------------------: | :----------------: | :------------------: | :---------: | :---------: | :-------------------: |
+|          Ant           | **3253.5+-894.3**  |          N           |      N      |      N      |         ~650          |
+|      HalfCheetah       | **5783.9+-1244.0** |        ~3120         |    ~1800    |    ~1700    |         ~1670         |
+|         Hopper         | **2609.3+-700.8**  |        ~2300         |    ~2330    |    ~2400    |         ~1850         |
+|        Walker2d        |   3588.5+-756.6    |      **~4000**       |    ~3460    |    ~3510    |         ~1230         |
+|        Swimmer         |     66.7+-99.1     |          N           |    ~108     |    ~111     |       **~120**        |
+|        Humanoid        |  **787.1+-193.5**  |          N           |      N      |      N      |           N           |
+|        Reacher         |   **-4.1+-0.3**    |         ~-5          |     ~-7     |     ~-6     |           N           |
+|    InvertedPendulum    | **1000.0+-0.0**    |          N           |  **~1000**  |    ~940     |           N           |
+| InvertedDoublePendulum | **9231.3+-270.4**  |          N           |    ~8000    |    ~7350    |           N           |
+
+|      Environment       | Tianshou(3M steps) | [Spinning Up(Pytorch)](https://spinningup.openai.com/en/latest/spinningup/bench_ppo.html)|
+| :--------------------: | :----------------: | :--------------------: |
+|          Ant           | **4079.3+-880.2**  |         ~3000          |
+|      HalfCheetah       | **7337.4+-1508.2** |         ~3130          |
+|         Hopper         | **3127.7+-413.0**  |         ~2460          |
+|        Walker2d        | **4895.6+-704.3**  |         ~2600          |
+|        Swimmer         |     81.4+-96.0     |          ~120          |
+|        Humanoid        | **1359.7+-572.7**  |           N            |
+|        Reacher         |   **-3.7+-0.3**    |           N            |
+|    InvertedPendulum    |  **1000.0+-0.0**   |           N            |
+| InvertedDoublePendulum |  **9231.3+-270.4** |           N            |
 
 ## Note
 
