@@ -77,7 +77,7 @@ class A2CPolicy(PGPolicy):
 
     def _compute_returns(
         self, batch: Batch, buffer: ReplayBuffer, indice: np.ndarray
-    ):
+    ) -> Batch:
         v_s, v_s_ = [], []
         with torch.no_grad():
             for b in batch.split(self._batch, shuffle=False, merge_last=True):
@@ -101,7 +101,7 @@ class A2CPolicy(PGPolicy):
                 np.sqrt(self.ret_rms.var + self._eps)
             self.ret_rms.update(unnormalized_returns)
         else:
-            batch.returns = unnormalized_returns  
+            batch.returns = unnormalized_returns
         batch.returns = to_torch_as(batch.returns, batch.v_s)
         batch.adv = to_torch_as(advantages, batch.v_s)
         return batch
@@ -144,4 +144,3 @@ class A2CPolicy(PGPolicy):
             "loss/vf": vf_losses,
             "loss/ent": ent_losses,
         }
-
