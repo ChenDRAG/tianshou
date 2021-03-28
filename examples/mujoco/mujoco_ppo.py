@@ -1,4 +1,3 @@
-import free_mjc
 import os
 import gym
 import torch
@@ -42,6 +41,7 @@ def get_args():
     parser.add_argument('--resume-path', type=str, default=None)
     # ppo special
     parser.add_argument('--rew-norm', type=int, default=True)
+    # In theory, `vf-coef` will not make any difference if using Adam optimizer.
     parser.add_argument('--vf-coef', type=float, default=0.25)
     parser.add_argument('--ent-coef', type=float, default=0.0)
     parser.add_argument('--gae-lambda', type=float, default=0.95)
