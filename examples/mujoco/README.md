@@ -216,6 +216,12 @@ By comparison to both classic literature and open source implementations (e.g., 
 |    InvertedPendulum    |  **1000.0+-0.0**   |           N            |
 | InvertedDoublePendulum |  **9231.3+-270.4** |           N            |
 
+#### Hints for PPO
+0. 
+
+
+
+
 ## Note
 
 <a name="footnote1">[1]</a>  Supported environments include HalfCheetah-v3, Hopper-v3, Swimmer-v3, Walker2d-v3, Ant-v3, Humanoid-v3, Reacher-v2, InvertedPendulum-v2 and InvertedDoublePendulum-v2. Pusher, Thrower, Striker and HumanoidStandup are not supported because they are not commonly seen in literatures.
