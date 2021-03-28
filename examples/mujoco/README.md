@@ -19,8 +19,6 @@ Supported algorithms are listed below:
 - [Advantage Actor-Critic (A2C)](https://openai.com/blog/baselines-acktr-a2c/), [commit id](https://github.com/thu-ml/tianshou/tree/1730a9008ad6bb67cac3b21347bed33b532b17bc)
 - [Proximal Policy Optimization (PPO)](https://arxiv.org/pdf/1707.06347.pdf), [commit id](https://github.com/thu-ml/tianshou/tree/1730a9008ad6bb67cac3b21347bed33b532b17bc)
 
-## Offpolicy algorithms
-
 #### Usage
 
 Run
@@ -49,27 +47,28 @@ This will start 10 experiments with different seeds.
 
 Other graphs can be found under `/examples/mujuco/benchmark/`
 
+## Offpolicy algorithms
 #### Hints
 
-In offpolicy algorithms(DDPG, TD3, SAC), the shared hyperparameters are almost the same<sup>[[8]](#footnote8)</sup>, and most hyperparameters are consistent with those used for benchmark in SpinningUp's implementations<sup>[[9]](#footnote9)</sup>.
-
-By comparison to both classic literature and open source implementations (e.g., SpinningUp)<sup>[[1]](#footnote1)</sup><sup>[[2]](#footnote2)</sup>, Tianshou's implementations of DDPG, TD3, and SAC are roughly at-parity with or better than the best reported results for these algorithms.
+0. In offpolicy algorithms(DDPG, TD3, SAC), the shared hyperparameters are almost the same, and unless otherwise stated, hyperparameters are consistent with those used for benchmark in SpinningUp's implementations(e.g. We use batchsize of 256 in DDPG/TD3/SAC while SpinningUp use 100. Minor difference also lies with `start-timesteps`, data loop method `step_per_collect`, method to deal with/bootstrap truncated steps because of timelimit and unfinished/collecting episodes (contribute to performance improvement), etc.).
+1. By comparison to both classic literature and open source implementations (e.g., SpinningUp)<sup>[[1]](#footnote1)</sup><sup>[[2]](#footnote2)</sup>, Tianshou's implementations of DDPG, TD3, and SAC are roughly at-parity with or better than the best reported results for these algorithms, so you can definitely use Tianshou's benchmark for research purposes.
+2. We didn't compare offpolicy algorithms to OpenAI baselines [benchmark](https://github.com/openai/baselines/blob/master/benchmarks_mujoco1M.htm), because for now it seems that they haven't provided benchmark for offpolicy algorithms, but in [SpinningUp docs](https://spinningup.openai.com/en/latest/spinningup/bench.html) they stated that "SpinningUp implementations of DDPG, TD3, and SAC are roughly at-parity with the best-reported results for these algorithms", so we think lack of comparisons with OpenAI baselines is okay.
 
 ### DDPG
 
 |      Environment       |     Tianshou      | [SpinningUp (PyTorch)](https://spinningup.openai.com/en/latest/spinningup/bench.html) | [TD3 paper (DDPG)](https://arxiv.org/abs/1802.09477) | [TD3 paper (OurDDPG)](https://arxiv.org/abs/1802.09477) |
-| :--------------------: | :---------------: | :----------------------------------------------------------: | :--------------------------------------------------: | :-----------------------------------------------------: |
-|          Ant           |     990.4±4.3     |                             ~840                             |                      **1005.3**                      |                          888.8                          |
-|      HalfCheetah       | **11718.7±465.6** |                            ~11000                            |                        3305.6                        |                         8577.3                          |
-|         Hopper         | **2197.0±971.6**  |                            ~1800                             |                      **2020.5**                      |                         1860.0                          |
-|        Walker2d        |   1400.6±905.0    |                            ~1950                             |                        1843.6                        |                       **3098.1**                        |
-|        Swimmer         |   **144.1±6.5**   |                             ~137                             |                          N                           |                            N                            |
-|        Humanoid        |  **177.3±77.6**   |                              N                               |                          N                           |                            N                            |
-|        Reacher         |   **-3.3±0.3**    |                              N                               |                        -6.51                         |                          -4.01                          |
-|    InvertedPendulum    |  **1000.0±0.0**   |                              N                               |                      **1000.0**                      |                       **1000.0**                        |
-| InvertedDoublePendulum |   8364.3±2778.9   |                              N                               |                      **9355.5**                      |                         8370.0                          |
+| :--------------------: | :---------------: | :--------------------: | :----------------: | :-------------------: |
+|          Ant           |     990.4±4.3     |          ~840          |     **1005.3**     |         888.8         |
+|      HalfCheetah       | **11718.7±465.6** |         ~11000         |       3305.6       |        8577.3         |
+|         Hopper         | **2197.0±971.6**  |         ~1800          |     **2020.5**     |        1860.0         |
+|        Walker2d        |   1400.6±905.0    |         ~1950          |       1843.6       |      **3098.1**       |
+|        Swimmer         |   **144.1±6.5**   |          ~137          |         N          |           N           |
+|        Humanoid        |  **177.3±77.6**   |           N            |         N          |           N           |
+|        Reacher         |   **-3.3±0.3**    |           N            |       -6.51        |         -4.01         |
+|    InvertedPendulum    |  **1000.0±0.0**   |           N            |     **1000.0**     |      **1000.0**       |
+| InvertedDoublePendulum |   8364.3±2778.9   |           N            |     **9355.5**     |        8370.0         |
 
-\* details<sup>[[5]](#footnote5)</sup><sup>[[6]](#footnote6)</sup><sup>[[7]](#footnote7)</sup>
+\* details<sup>[[4]](#footnote4)</sup><sup>[[5]](#footnote5)</sup><sup>[[6]](#footnote6)</sup>
 
 ### TD3
 
@@ -85,7 +84,10 @@ By comparison to both classic literature and open source implementations (e.g., 
 |    InvertedPendulum    |  **1000.0±0.0**   |           N           |  **1000.0±0.0**  |
 | InvertedDoublePendulum |  **9349.2±14.3**  |           N           | **9337.5±15.0**  |
 
-\* details<sup>[[5]](#footnote5)</sup><sup>[[6]](#footnote6)</sup><sup>[[7]](#footnote7)</sup>
+\* details<sup>[[4]](#footnote4)</sup><sup>[[5]](#footnote5)</sup><sup>[[6]](#footnote6)</sup>
+
+#### Hints
+0. TD3's learning rate is set to 3e-4 while it is 1e-3 for DDPG/SAC. However, there is NO enough evidence to support our choice of such hyperparameters (we simply choose them because SpinningUp do so) and you can try playing with those hyperparameters to see if you can improve performance. Do tell us if you can!
 
 ### SAC
 
@@ -101,7 +103,10 @@ By comparison to both classic literature and open source implementations (e.g., 
 |    InvertedPendulum    |   **1000.0±0.0**   |           N           |      N      |
 | InvertedDoublePendulum |   **9359.5±0.4**   |           N           |      N      |
 
-\* details<sup>[[5]](#footnote5)</sup><sup>[[6]](#footnote6)</sup>
+\* details<sup>[[4]](#footnote4)</sup><sup>[[5]](#footnote5)</sup>
+
+#### Hints
+0. SAC's start-timesteps is set to 10000 by default while it is 25000 is DDPG/TD3. However, there is NO enough evidence to support our choice of such hyperparameters (we simply choose them because SpinningUp do so) and you can try playing with those hyperparameters to see if you can improve performance. Do tell us if you can!
 
 #### Hints for SAC
 
@@ -111,6 +116,10 @@ By comparison to both classic literature and open source implementations (e.g., 
 3. The deterministic evaluation helps a lot :)
 
 ## Onpolicy Algorithms
+
+#### Hints
+0. In A2C and PPO, unless otherwise stated, most hyperparameters are consistent with those used for benchmark in [ikostrikov/pytorch-a2c-ppo-acktr-gail](https://github.com/ikostrikov/pytorch-a2c-ppo-acktr-gail).
+1. Gernally speaking, by comparison to both classic literature and open source implementations (e.g., OPENAI Baselines)<sup>[[1]](#footnote1)</sup><sup>[[2]](#footnote2)</sup>, Tianshou's implementations of REINFORCE, A2C, PPO are better than the best reported results for these algorithms, so you can definitely use Tianshou's benchmark for research purposes.
 
 ### REINFORCE
 
@@ -127,7 +136,7 @@ By comparison to both classic literature and open source implementations (e.g., 
 | InvertedDoublePendulum |  **7726.2±1287.3**  |
 
 
-|      Environment       |      Tianshou(3M steps)      | [SpinningUp (VPG Pytorch)](https://spinningup.openai.com/en/latest/spinningup/bench_vpg.html)<sup>[[10]](#footnote10)</sup> |
+|      Environment       |      Tianshou(3M steps)      | [SpinningUp (VPG Pytorch)](https://spinningup.openai.com/en/latest/spinningup/bench_vpg.html)<sup>[[7]](#footnote7)</sup> |
 | :--------------------: | :--------------------------: | :------------------------: |
 |          Ant           |       **474.9+-133.5**       |             ~5             |
 |      HalfCheetah       |       **884.0+-41.0**        |            ~600            |
@@ -139,7 +148,7 @@ By comparison to both classic literature and open source implementations (e.g., 
 |    InvertedPendulum    |        **999.2+-2.4**        |             N              |
 | InvertedDoublePendulum |      **1059.7+-307.7**       |             N              |
 
-\* details<sup>[[5]](#footnote5)</sup><sup>[[6]](#footnote6)</sup>
+\* details<sup>[[4]](#footnote4)</sup><sup>[[5]](#footnote5)</sup>
 
 #### Hints for REINFORCE
 
@@ -177,13 +186,13 @@ By comparison to both classic literature and open source implementations (e.g., 
 |    InvertedPendulum    |  **1000.0+-0.0**   |    **~1000**    |    **~1000**    |
 | InvertedDoublePendulum | **9257.7+-277.4**  |      ~7100      |      ~8100      |
 
-\* details<sup>[[5]](#footnote5)</sup><sup>[[6]](#footnote6)</sup>
+\* details<sup>[[4]](#footnote4)</sup><sup>[[5]](#footnote5)</sup>
 
 #### Hints for A2C
 
 0. We choose `clip` action method in A2C instead of `tanh` option as used in REINFORCE simply to be consistent with original implementation. `tanh` may be better or equally well but we didn't have a try.
 1. (Initial) learning rate, lr decay, `step-per-collect` and `training-num` affect the performance of A2C to a great extend. These 4 hyperparameters also affect each other and should be tuned together. We have done full scale ablation studies on these 4 hyperparameters (more than 800 agents have been trained). Below are our findings.
-2. `step-per-collect` and `training-num` are equal to `bootstrap-lenghth`, which is the max length of an "episode" used in GAE estimator and 80/16=5 in default settings. When `bootstrap-lenghth` is small, (maybe) because GAE can look forward at most 5 steps and bootstrap strategy is used very often, the critic is less well-trained leading the actor to a not very high score. However, if we increase `step-per-collect` to increase `bootstrap-lenghth` (e.g. 256/16=16), actor/critic will be updated less often resulting in low sample efficiency and slow training process. To conclude, If you don't want to restrict env timesteps, you can try using larger `bootstrap-lenghth` and train with more steps to get a better converged score. Train slower, achieve higher.
+2. `step-per-collect` / `training-num` are equal to `bootstrap-lenghth`, which is the max length of an "episode" used in GAE estimator and 80/16=5 in default settings. When `bootstrap-lenghth` is small, (maybe) because GAE can look forward at most 5 steps and use bootstrap strategy very often, the critic is less well-trained leading the actor to a not very high score. However, if we increase `step-per-collect` to increase `bootstrap-lenghth` (e.g. 256/16=16), actor/critic will be updated less often, resulting in low sample efficiency and slow training process. To conclude, If you don't restrict env timesteps, you can try using larger `bootstrap-lenghth` and train with more steps to get a better converged score. Train slower, achieve higher.
 3. The learning rate 7e-4 with decay strategy is appropriate for `step-per-collect=80` and `training-num=16`. But if you use a larger `step-per-collect`(e.g. 256 - 2048), 7e-4 is a little bit small for `lr` because each update will have more data, less noise and thus smaller deviation in this case. So it is more appropriate to use a higher learning rate (e.g. 1e-3) to boost performance in this setting. If plotting results arise fast in early stages and become unstable later, consider lr decay first before decreasing lr.
 4. `max-grad-norm` didn't really help in our experiments. We simply keep it for consistency with other open-source implementations (e.g. SB3).
 5. Although original paper of A3C uses RMSprop optimizer, we found that Adam with the same learning rate worked equally well. We use RMSprop anyway. Again, for consistency.
@@ -210,11 +219,13 @@ By comparison to both classic literature and open source implementations (e.g., 
 |      HalfCheetah       | **7337.4+-1508.2** |         ~3130          |
 |         Hopper         | **3127.7+-413.0**  |         ~2460          |
 |        Walker2d        | **4895.6+-704.3**  |         ~2600          |
-|        Swimmer         |     81.4+-96.0     |          ~120          |
+|        Swimmer         |     81.4+-96.0     |       **~120**         |
 |        Humanoid        | **1359.7+-572.7**  |           N            |
 |        Reacher         |   **-3.7+-0.3**    |           N            |
 |    InvertedPendulum    |  **1000.0+-0.0**   |           N            |
 | InvertedDoublePendulum |  **9231.3+-270.4** |           N            |
+
+\* details<sup>[[4]](#footnote4)</sup><sup>[[5]](#footnote5)</sup>
 
 #### Hints for PPO
 1. Following [Andrychowicz, Marcin, et al](https://arxiv.org/abs/2006.05990) Sec 3.5, we use "recompute advantage" strategy, which conrtibutes a lot to our SOTA benchmark. However, I personally don't quite agree with their explanation about why "recompute advantage" helps. They stated that it's because old strategy "makes it impossible to compute advantages as the temporal structure is broken", but PPO's update equation is designed to learn from slightly-outdated advantages. I think the only reason "recompute advantage" works is that it update the critic serveral times rather than just one time per update, which leads to a better value function estimate.
@@ -233,16 +244,10 @@ By comparison to both classic literature and open source implementations (e.g., 
 
 <a name="footnote3">[3]</a>  We used the latest version of all mujoco environments in gym (0.17.3 with mujoco==2.0.2.13), but it's not often the case with other benchmarks. Please check for details yourself in the original paper. (Different version's outcomes are usually similar, though)
 
-<a name="footnote4">[4]</a>  We didn't compare offpolicy algorithms to OpenAI baselines [benchmark](https://github.com/openai/baselines/blob/master/benchmarks_mujoco1M.htm), because for now it seems that they haven't provided benchmark for offpolicy algorithms, but in [SpinningUp docs](https://spinningup.openai.com/en/latest/spinningup/bench.html) they stated that "SpinningUp implementations of DDPG, TD3, and SAC are roughly at-parity with the best-reported results for these algorithms", so we think lack of comparisons with OpenAI baselines is okay.
+<a name="footnote4">[4]</a>  ~ means the number is approximated from the graph because accurate numbers is not provided in the paper. N means graphs not provided.
 
-<a name="footnote5">[5]</a>  ~ means the number is approximated from the graph because accurate numbers is not provided in the paper. N means graphs not provided.
+<a name="footnote5">[5]</a>  Reward metric: The meaning of the table value is the max average return over 10 trails (different seeds) ± a single standard deviation over trails. Each trial is averaged on another 10 test seeds. Only the first 1M steps data will be considered, if not otherwise stated. The shaded region on the graph also represents a single standard deviation. It is the same as [TD3 evaluation method](https://github.com/sfujim/TD3/issues/34).
 
-<a name="footnote6">[6]</a>  Reward metric: The meaning of the table value is the max average return over 10 trails (different seeds) ± a single standard deviation over trails. Each trial is averaged on another 10 test seeds. Only the first 1M steps data will be considered, if not otherwise stated. The shaded region on the graph also represents a single standard deviation. It is the same as [TD3 evaluation method](https://github.com/sfujim/TD3/issues/34).
+<a name="footnote6">[6]</a>  In TD3 paper, shaded region represents only half of standard deviation.
 
-<a name="footnote7">[7]</a>  In TD3 paper, shaded region represents only half of standard deviation.
-
-<a name="footnote8">[8]</a>  SAC's start-timesteps is set to 10000 by default while it is 25000 is DDPG/TD3. TD3's learning rate is set to 3e-4 while it is 1e-3 for DDPG/SAC. However, there is NO enough evidence to support our choice of such hyperparameters (we simply choose them because of SpinningUp) and you can try playing with those hyperparameters to see if you can improve performance. Do tell us if you can!
-
-<a name="footnote9">[9]</a>  We use batchsize of 256 in DDPG/TD3/SAC while SpinningUp use 100. Minor difference also lies with `start-timesteps`, data loop method `step_per_collect`, method to deal with/bootstrap truncated steps because of timelimit and unfinished/collecting episodes (contribute to performance improvement), etc.
-
-<a name="footnote10">[10]</a>  Comparing Tianshou's REINFORCE algorithm with SpinningUp's VPG is quite unfair because SpinningUp's VPG uses a generative advantage estimator (GAE) which requires a dnn value predictor (critic network), which makes so called "VPG" more like A2C (advantage actor critic) algorithm. Even so, you can see that we are roughly at-parity with each other even if tianshou's REINFORCE do not use a critic or GAE.
+<a name="footnote7">[7]</a>  Comparing Tianshou's REINFORCE algorithm with SpinningUp's VPG is quite unfair because SpinningUp's VPG uses a generative advantage estimator (GAE) which requires a dnn value predictor (critic network), which makes so called "VPG" more like A2C (advantage actor critic) algorithm. Even so, you can see that we are roughly at-parity with each other even if tianshou's REINFORCE do not use a critic or GAE.
